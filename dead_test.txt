@@ -1,0 +1,107 @@
+C-64 Dead Test Rev 781220 kinzi 002
+===================================
+
+(Deutsche Version nachstehend / German version below.)
+
+I disassembled the original C-64 DEAD TEST REV 781220 using "WFDis" 
+(https://www.white-flame.com/wfdis/), commented the code (not yet fully 
+finished), relocated constants, strings, the charset etc., changed it to ACME
+standard format and "improved" (I hope :-) a few things. 
+
+I am neither an ACME expert nor a divine coder. Many things might be done in 
+more beauty or ellegance, since this is my first usage of ACME (or an 
+assembler at all, because I used only monitors for coding assembler in my 
+former life. :-) So please have mercy with me ... 
+
+* Border color is now changed to light gray on second opcode after initial SEI
+  and thus as early as possible. If the CPU is able to read the reset vector
+  but crashes after a few opcodes the border (screen) stays light gray.
+  (Was black in original version = the VIC power-up default.)
+  
+* Border color changes to cyan in initial RAM test. (Stayed black in original
+  version.)
+
+* Character set in original version is hard to read, especially digits.
+  Changed to standard C-64 character set.
+
+* Sound test now plays four wave forms including noise and "in right order" -
+  triangle, sawtooth, square, noise.
+
+* "BAD" on tests leads to infinitive loop already in original verion. This is
+  now announced by cycling through the border colors in this loop, as done
+  in Easy Flash 3 when unable to reset.
+  
+* The screen layout has been expanded slightly, data bit numbers were added
+  and also the IC identifiers for the 250466 and 250469 boards to ease 
+  things when repairing. :-) "OK" results for tests are now green to clarify
+  things.
+  
+* Two low-current LEDs can be connected to TAPE Port on lines "MOTOR" and 
+  "SENSE" to show activity even on systems with no screen output. They should
+  be connected to ground via a 1 kOhm or greater resistor to protect to CPU 
+  port. The LEDs will flip their status every time the TOD clock display is 
+  updated (every 20 seconds or so) and will blink together with the screen 
+  if RAM error are "blinked" out during initial RAM test.
+  
+  Check64 V2.0 from GMP@Forum64 is planned to incorporate these two LEDs.
+
+Use the source code for whatever you want (it isn't even mine in large parts)
+but be fair and give credits ;-) ...
+
+------------
+
+Ich habe das originale C-64 DEAD TEST REV 781220 mit dem "WFDis" Disassemler
+(https://www.white-flame.com/wfdis/), den Code weitgehend kommentiert 
+sowie einige Dinge umgestellt (Strings, Tabellen, Zeichensatz usw.), ans
+ACME-Format angepasst und (hoffentlich :-) einige DInge verbessert.
+
+Ich bin weder ein ACME-Experte noch ein begnadeter Programmierer, daher wird
+vermutlich vieles schöner oder einfacher zu lösen sein, auch weil das mein
+erstes "Projekt" ist, frü das ich ACME verwendet, bzw. überhaupt einen 
+Assembler, denn bisher habe ich Assembler immer nur im Monitor gecodet. :-)
+Ich bitte also um Nachsicht. :-)
+
+* Die Rahmenfarbe wird beim zweiten Befehl (nach dem initialen SEI) auf 
+  hellgrau gestellt, also so früh wie möglich. Wenn die CPU den Reset-Vektor
+  lesen kann und startet, dann aber nach ein paar Befehlen crasht bleibt der
+  Rahmen (und damit der Hintergrund) hellgrau. In der Orioginalversion ist er
+  zu diesem Zeitpunkt schwarz - das ist der Standardwert des VIC beim 
+  Einschalten.
+  
+* Die Rahmenfarbe wechselt beim initialen RAM-Test auf türkis. (In der
+  originalen Version bliebt der Bildschirm hier ebenfalls schwarz).
+  
+* Der Zeichensatz des Originals ist schlecht lesbar, vor allem die Ziffern.
+  Ich habe den originalen C-64-Zeichensatz eingebaut.
+  
+* Der Sound-Test spielt nun alle vier Wellenformen inkl. "Rauschen", und zwar
+  in der "richtigen" Reihenfolge (Dreicke, Sägezahn, Rechteck, Rauschen).
+  
+* Trifft der RAM-Test auf Fehler und wirft BAD neben den IC-Bezeichnungen
+  aus, wird in eine Endlosschleife gesprungen, auch bereits bei der Original-
+  Version. Jetzt wird in dieser Endlosschleife die Rahmenfarbe durchgerollt,
+  wie es das Easy Flash 3 auch macht, wenn es keinen Reset auslösen konnte.
+  
+* Der Bildschirmaufbau wurde etwas überarbeitet, es werden nun die
+  Bezeichnungen der Datenleitungen neben den IC-Namen angeführt, ebenso wie
+  die (abweochenden) IC-Numemrn der 250466 und 250469; dies erleichtert 
+  Reparaturen. :-) Tests mit Ergebnis "OK" erscheint dieses nun in grün.
+  
+* Am TAPE-Port können zwei Low-Current-LEDs, jeweils an "MOTOR" und "SENSE"
+  angeschlossen werden, über jeweils einen Widerstand von mindestens 1 kOhm
+  zum Schutz des I/O-Ports der CPU. Die LEDs wechseln ihren Status bei jedem
+  Update der Uhren-Anzeige rechts unten, also so ca. alle 20 Sekunden.
+  Außerdem blinken sie mit dem Bildschirm mit, wenn beim initialen RAM-Test
+  ein Fehler festgestellt wird. Das ist vor allem auf Rechnern mit kaputter
+  Bildschirmausgabe interessant.
+  
+  Das Check64 V2.0 von GMP aus dem Forum64 wird diese LEDs voraussichtlich
+  bereits mitbringen.
+  
+Macht mit dem Source-Code, was ihr wollt (ist großteils eh nicht meiner :-),
+aber schmückt euch nicht damit und "gebt credits". ;-)
+
+------------
+
+kinzi, 2019-11-18
+  

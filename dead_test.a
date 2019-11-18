@@ -1,0 +1,1365 @@
+;---------------------------------------------------------------------------------------------------------------------------
+; "C-64 DEAD TEST REV 781220 KINZI 002"
+;
+; Disassembled source code of original Dead Test - copyright, credits, status unknown.
+; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    !to "dead_test_kinzi_002.bin", plain
+
+;---------------------------------------------------------------------------------------------------------------------------
+;
+; ROM layout for original "Dead Test"
+;
+; $EAD8..$ECD7 = contains char set
+;
+;---------------------------------------------------------------------------------------------------------------------------
+;
+; Memory layout for "Dead Test"
+;
+; $0400..$07FF = screen RAM
+; $0800..$09FF = char set in RAM
+; $D800..$DBFF = color RAM
+; $DC00..$DFFF = I/O
+; 
+;---------------------------------------------------------------------------------------------------------------------------
+;
+; CPU I/O Port:
+;
+; P0 - "/LORAM"                 - no impact in Ultimax Mode
+; P1 - "/HIRAM"                 - no impact in Ultimax Mode
+; P2 - "/CHAREN"                - no impact in Ultimax Mode
+; P3 - "CASS WRITE" (Pin "E/5") - bit 3 (dec 8)
+; P4 - "CASS SENSE" (Pin "F/6") - bit 4 (dec 16) 
+; P5 - "CASS MOTOR" (Pin "C/3") - bit 5 (dec 32)
+;
+; P3/P4 could be used for status LEDs
+;
+; In the 586220 harness CASS_WRITE and CASS_MOTOR are interconnected through resistors, CASS_READ and CASS_SENSE are
+; directly connected together. So CASS_SENSE and CASS_MOTOR could be used for LEDs (and _will_ be in Check64 V2.0).
+;
+;---------------------------------------------------------------------------------------------------------------------------
+;
+; Using startup colors like in Amiga self diag at startup ...
+;
+; Startup               = light gray             CASS MOTOR = 1 ; CASS SENSE = 1 (CPU default)
+; Initial RAM Test      = cyan            		 CASS MOTOR = 0 ; CASS SENSE = 0
+; Main Test             = (standard)             CASS MOTOR = 0 ; CASS SENSE = 1 (swap every TOD clock update)
+;
+; At RAM test erros blink both LEDs just like screen color
+;
+;---------------------------------------------------------------------------------------------------------------------------
+
+
+;---------------------------------------------------------------------------------------------------------------------------
+; start of code
+;---------------------------------------------------------------------------------------------------------------------------
+
+
+                    *= $e000	
+
+                    !hex 00 e0 00 e0 c3 c2 cd 38 30         ; Vectors and "CBM80" for normal cartridge use
+                                                            ; not used at the moment, could be useful when trying to
+                                                            ; merge 586220 and 781220 to a single dual-use-cartridge
+                    
+                    *= $f000                                ; So this is the start of the "Ultimax Part" :-)
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Program Start
+;---------------------------------------------------------------------------------------------------------------------------
+
+Reset_Handler       sei
+                    dec $d020               ; patch by kinzi: set screen color to different color (from black) as early as possible
+                    cld
+
+                    lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
+                    sta $01
+                    lda #$37                ; xx110xxx : CASS MOTOR = out, CASS SENSE = out, CASS WRITE = in
+                    sta $00
+                    
+                    jmp InitialRamTest      ; jump to initial RAM test
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; Main Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+CopyCharSet1        lda #$d7                ; xx010xxx : CASS MOTOR = 0,   CASS SENSE = 1,   CASS WRITE = 0
+                    sta $01
+
+                    lda #<CharSet           ; copy char set to $0800
+                    ldx #>CharSet
+                    sta $09
+                    stx $0a
+                    lda #$00
+                    ldx #$08
+                    sta $0b
+                    stx $0c
+                    ldx #$01                ; copy two pages (512 bytes)
+                    ldy #$00
+CopyCharSet1_1      lda ($09),y
+                    sta ($0b),y
+                    iny
+                    bne CopyCharSet1_1
+                    inc $0a
+                    inc $0c
+                    dex
+                    bpl CopyCharSet1_1
+                    
+CiaRegInit1         ldx #$03
+CiaRegInit1_1       lda Cia1Init,x          ; CIA init
+                    sta $dc07,x
+                    lda Cia2Init,x
+                    sta $dd07,x
+                    dex
+                    bpl CiaRegInit1_1
+                    ldx #$00
+                    stx $02
+                    stx $03
+
+ClearScreen         ldx #$00                ; clear screen following
+ClearScreen_1       lda #$20
+                    sta $0400,x
+                    sta $0500,x
+                    sta $0600,x
+                    sta $0700,x
+                    lda #$06                ; set char color on whole screen
+                    sta $d800,x
+                    sta $d900,x
+                    sta $da00,x
+                    sta $db00,x
+                    inx
+                    bne ClearScreen_1
+                    
+OutText_Header      ldx #$27                ; 40 chars (header)
+OutText_Header_1    lda StatusHeader,x      ; fetch text
+                    sta $0630,x             ; store to screen RAM
+                    lda ColorTextBad                ; RED color
+                    sta $da30,x             ; fill color RAM
+                    dex
+                    bpl OutText_Header_1
+                    
+OutText_Status      ldx #$00                ; output a string terminated by "FF"
+OutText_Status_1    lda StatusText,x        ; fetch text
+                    cmp #$ff                ; eot flag detected?
+                    beq OutColor_Status     ; yes, exit
+                    sta $0658,x             ; no, store to screen RAM
+                    inx
+                    jmp OutText_Status_1    ; loop on
+                    
+OutColor_Status     ldx #$00                ; write correct colors to color RAM, values are terminated by "FF"
+OutColor_Status_1   lda StatusColor,x       ; fetch color
+                    cmp #$ff                ; eot flag detected?
+                    beq OutText_Footer      ; yes, exit
+                    sta $da58,x             ; no, store to color RAM
+                    inx
+                    jmp OutColor_Status_1   ; loop on
+                    
+OutText_Footer      ldx #$27                ; 40 chars (footer)
+OutText_Footer_1    lda StatusFooter,x
+                    sta $0748,x
+                    lda ColorTextBad                ; RED color
+                    sta $db48,x             ; fill color RAM
+                    dex
+                    bpl OutText_Footer_1
+
+CiaRegInit2         lda #$08                ; CIA init part 2
+                    sta $dc0f
+                    sta $dd0f
+                    lda #$48
+                    sta $dc0e
+                    lda #$08
+                    sta $dd0e
+
+VicRegInit          ldx #$2f                ; VIC register init
+VicRegInit_1        lda VicInit,x
+                    sta $d000,x
+                    dex
+                    bpl VicRegInit_1
+                    
+OutText_Caption     ldx #$27
+OutText_Caption_1   lda strCaption,x        ; write program title to screen
+                    sta $0400,x
+                    dex
+                    bpl OutText_Caption_1
+                    
+OutText_Count       ldx #$04
+OutText_Count_1     lda strCount,x          ; write "COUNT"
+                    sta $07c0,x
+                    dex
+                    bpl OutText_Count_1
+                    
+                    lda $02                 ; output counter LSB
+                    and #$0f
+                    ora #$30
+                    sta $07c9
+                    
+                    lda $02                 ; output counter digit 2
+                    lsr
+                    lsr
+                    lsr
+                    lsr
+                    and #$0f
+                    ora #$30
+                    sta $07c8
+                    
+                    lda $03                 ; output counter digit 3
+                    and #$0f
+                    ora #$30
+                    sta $07c7
+                    
+                    lda $03                 ; output counter MSB
+                    lsr
+                    lsr
+                    lsr
+                    lsr
+                    and #$0f
+                    ora #$30
+                    sta $07c6
+
+                    lda #$37                ; xx110xxx : CASS MOTOR = 1, CASS SENSE = 1 (CASS WRITE = in)
+                    sta $01
+
+                    jmp Test_ZeroPage       ; use JMP because stack is not reliable yet
+                    
+BackFromZPTest      jmp Test_StackPage      ; atill use JMP because stack is still not reliable yet
+                    
+BackFromStackTest   jsr UpdateTod1Display
+                    jsr Test_ScreenRam
+                    jsr UpdateTod1Display
+                    jsr Test_ColorRam
+                    jsr UpdateTod1Display
+                    jsr Test_RamTest
+
+CopyCharSet2        lda #<CharSet           ; Copy char set to $0800 again after RAM test destroyed the char set
+                    ldx #>CharSet
+                    sta $09
+                    stx $0a
+                    lda #$00
+                    ldx #$08
+                    sta $0b
+                    stx $0c
+                    ldx #$01
+                    ldy #$00
+CopyCharSet2_2      lda ($09),y
+                    sta ($0b),y
+                    iny
+                    bne CopyCharSet2_2
+                    inc $0a
+                    inc $0c
+                    dex
+                    bpl CopyCharSet2_2      ; copy two pages (512 bytes) 
+                    
+                    jsr UpdateTod1Display
+                    jsr Test_SoundTest
+                    
+                    sed                     ; calculate COUNT
+                    lda #$01
+                    clc
+                    adc $02
+                    sta $02
+                    lda #$00
+                    adc $03
+                    sta $03
+                    cld
+                    
+                    lda #$e7                ; 11100111 : CASS MOTOR = 1,   CASS SENSE = 0,   CASS WRITE = 0
+                    sta $01
+                    lda #$37                ; 00110111 : CASS MOTOR = out, CASS SENSE = out, CASS WRITE = in
+                    sta $00
+
+                    lda #$00                ; shut down SID
+                    sta $d418
+                    
+ClearUpperScreen    ldx #$00                ; clear screen, keep RAM status aera intact
+                    lda #$20
+ClearUpperScreen_1  sta $0400,x             ; first 256 chars
+                    sta $0500,x             ; second 256 chars
+                    inx
+                    bne ClearUpperScreen_1
+                    ldx #$2e                ; additional 47 chars
+                    lda #$20
+ClearUpperScreen_2  sta $0600,x
+                    dex
+                    bpl ClearUpperScreen_2
+                    jmp VicRegInit          ; start over at VIC init
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Initial RAM Test 
+;---------------------------------------------------------------------------------------------------------------------------
+
+InitialRamTest      lda #$03                ; background color at initial RAM test
+                    ldx #$ff                ; patched by kinzi: relocated stack init to gain space for DEC d020 at begin
+                    txs
+                    sta $d020               ; 
+                    sta $d021               ; 
+                    ldx #$15                ; 22 test patterns
+                    ldy #$00
+NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
+                    sta $0100,y             ; write to RAM pages
+                    sta $0200,y
+                    sta $0300,y
+                    sta $0400,y
+                    sta $0500,y
+                    sta $0600,y
+                    sta $0700,y
+                    sta $0800,y
+                    sta $0900,y
+                    sta $0a00,y
+                    sta $0b00,y
+                    sta $0c00,y
+                    sta $0d00,y
+                    sta $0e00,y
+                    sta $0f00,y
+                    iny
+                    bne NextTestPattern     ; loop on
+                    txa                     ; save X in A
+
+                    ldx #$00
+                    ldy #$00            
+InitRamTest_Delay   dey                     ; delay 256 * 5 cycles = 1.25 ms
+                    bne InitRamTest_Delay
+                    dex                     ; delay 256 times = about 80 ms
+                    bne InitRamTest_Delay
+
+                    tax                     ; restore X from A
+ReCheckTestPattern  lda $0100,y             ; now re-read RAM pages and compare with stored values
+                    cmp TestPatterns,x
+                    bne ErrorHandler        ; on error branch to error handler
+                    lda $0200,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0300,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0400,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0500,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0600,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0700,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0800,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0900,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0a00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0b00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0c00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0d00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0e00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    lda $0f00,y
+                    cmp TestPatterns,x
+                    bne ErrorHandler
+                    iny
+                    beq PatternComplete     ; already looped through whole RAM page?
+                    jmp ReCheckTestPattern  ; no -> loop on
+                    
+ErrorHandler        jmp BlinkOutRamError               ; error handler for RAM Test errors
+                    
+PatternComplete     dex                     ; no errors, continue with next pattern
+                    bmi JumpToStartOver     ; all pattern tested?
+                    ldy #$00                ; no
+                    jmp NextTestPattern     ; run RAM test with next pattern
+                    
+JumpToStartOver     jmp CopyCharSet1        ; back to begin (the whole block of initial RAM test was obviously added later)
+
+;---------------------------------------------------------------------------------------------------------------------------
+
+BlinkOutRamError    lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
+                    sta $01
+
+                    eor TestPatterns,x
+                    tax
+                    and #$fe
+                    bne Le267
+                    ldx #$08
+                    jmp Le2a5
+                    
+Le267               txa
+                    and #$fd
+                    bne Le271
+                    ldx #$07
+                    jmp Le2a5
+                    
+Le271               txa
+                    and #$fb
+                    bne Le27b
+                    ldx #$06
+                    jmp Le2a5
+                    
+Le27b               txa
+                    and #$f7
+                    bne Le285
+                    ldx #$05
+                    jmp Le2a5
+                    
+Le285               txa
+                    and #$ef
+                    bne Le28f
+                    ldx #$04
+                    jmp Le2a5
+                    
+Le28f               txa
+                    and #$df
+                    bne Le299
+                    ldx #$03
+                    jmp Le2a5
+                    
+Le299               txa
+                    and #$bf
+                    bne Le2a3
+                    ldx #$02
+                    jmp Le2a5
+                    
+Le2a3               ldx #$01
+Le2a5               txs
+Le2a6               lda #$01
+                    sta $d020
+                    sta $d021
+
+                    lda #$f7                ; xx110xxx : CASS MOTOR = 1,   CASS SENSE = 1,   CASS WRITE = 0
+                    sta $01
+
+                    txa
+                    ldx #$7f
+                    ldy #$00
+Le2b3               dey
+                    bne Le2b3
+                    dex
+                    bne Le2b3
+                    tax
+                    lda #$00
+                    sta $d020
+                    sta $d021
+
+                    lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
+                    sta $01
+
+                    txa
+                    ldx #$7f
+                    ldy #$00
+Le2c7               dey
+                    bne Le2c7
+                    dex
+                    bne Le2c7
+Le2cd               dey
+                    bne Le2cd
+                    dex
+                    bne Le2cd
+                    tax
+                    dex
+                    beq Le2da
+                    jmp Le2a6
+                    
+Le2da               ldx #$00
+                    ldy #$00
+Le2de               dey
+                    bne Le2de
+                    dex
+                    bne Le2de
+Le2e4               dey
+                    bne Le2e4
+                    dex
+                    bne Le2e4
+Le2ea               dey
+                    bne Le2ea
+                    dex
+                    bne Le2ea
+Le2f0               dey
+                    bne Le2f0
+                    dex
+                    bne Le2f0
+                    tsx
+                    jmp Le2a6
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Zero Page Test
+;---------------------------------------------------------------------------------------------------------------------------
+                    
+Test_ZeroPage       ldx #$08
+Le2fc               lda strZeroPage,x
+                    sta $0450,x
+                    dex
+                    bpl Le2fc
+                    ldx #$13
+Le307               lda TestPatterns,x
+                    ldy #$12
+Le30c               sta $0000,y
+                    iny
+                    bne Le30c
+                    txa
+                    ldx #$00
+                    ldy #$00
+Le317               dey
+                    bne Le317
+                    dex
+                    bne Le317
+                    tax
+                    lda TestPatterns,x
+                    ldy #$12
+Le323               cmp $0000,y
+                    bne Le33b
+                    iny
+                    bne Le323
+                    dex
+                    bpl Le307
+                    lda #$0f                ; "O"
+                    sta $045d
+                    lda #$0b                ; "K"
+                    sta $045e
+                    lda ColorTextOk
+                    sta $d85d
+                    sta $d85e
+                    jmp BackFromZPTest      ; back to where we came from
+                    
+Le33b               eor TestPatterns,x
+                    tax
+                    lda #$02                ; "B"
+                    sta $045d
+                    lda #$01                ; "A"
+                    sta $045e
+                    lda #$04                ; "D"
+                    sta $045f
+                    lda ColorTextBad
+                    sta $d85d
+                    sta $d85e
+                    sta $d85f
+                    jmp RamTest_Error_Bit_0
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; Stack Page Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+Test_StackPage      ldx #$09
+Le353               lda strStackPage,x
+                    sta $0478,x
+                    dex
+                    bpl Le353
+                    ldx #$13
+Le35e               lda TestPatterns,x
+                    ldy #$00
+Le363               sta $0100,y
+                    iny
+                    bne Le363
+                    txa
+                    ldx #$00
+                    ldy #$00
+Le36e               dey
+                    bne Le36e
+                    dex
+                    bne Le36e
+                    tax
+                    lda TestPatterns,x
+Le378               cmp $0100,y
+                    bne Le390
+                    iny
+                    bne Le378
+                    dex
+                    bpl Le35e
+                    lda #$0f                ; "O"
+                    sta $0485
+                    lda #$0b                ; "K"
+                    sta $0486
+                    lda ColorTextOk
+                    sta $d885
+                    sta $d886
+                    jmp BackFromStackTest   ; back to where we came from
+                    
+Le390               eor TestPatterns,x
+                    tax
+                    lda #$02                ; "B"
+                    sta $0485
+                    lda #$01                ; "A"
+                    sta $0486
+                    lda #$04                ; "D"
+                    sta $0487
+                    lda ColorTextBad
+                    sta $d885
+                    sta $d886
+                    sta $d887
+                    jmp RamTest_Error_Bit_0
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; Screen RAM Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+Test_ScreenRam      ldx #$09
+Le3a8               lda strScreenRam,x
+                    sta $04a0,x
+                    dex
+                    bpl Le3a8
+                    ldx #$00
+                    ldy #$04
+                    stx $09
+                    sty $0a
+Le3b9               ldy #$00
+                    lda ($09),y
+                    pha
+                    ldx #$13
+Le3c0               lda TestPatterns,x
+                    sta ($09),y
+                    txa
+                    ldx #$00
+Le3c8               dex
+                    bne Le3c8
+                    tax
+                    lda ($09),y
+                    cmp TestPatterns,x
+                    bne Le3f0
+                    dex
+                    bpl Le3c0
+                    pla
+                    sta ($09),y
+                    inc $09
+                    bne Le3df
+                    inc $0a
+Le3df               lda $0a
+                    cmp #$08
+                    bne Le3b9
+                    lda #$0f                ; "O"
+                    sta $04ad
+                    lda #$0b                ; "K"
+                    sta $04ae
+                    lda ColorTextOk
+                    sta $d8ad
+                    sta $d8ae
+                    rts
+                    
+Le3f0               eor TestPatterns,x
+                    tax
+                    lda #$02                ; "B"
+                    sta $04ad
+                    lda #$01                ; "A"
+                    sta $04ae
+                    lda #$04                ; "D"
+                    sta $04af
+                    lda ColorTextBad
+                    sta $d8ad
+                    sta $d8ae
+                    sta $d8af
+                    jsr RamTest_Error_Bit_0
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Color Ram Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+Test_ColorRam       ldx #$08
+Le408               lda strColorRam,x
+                    sta $04c8,x
+                    dex
+                    bpl Le408
+                    ldx #$00
+                    ldy #$d8
+                    stx $09
+                    sty $0a
+                    ldy #$00
+Le41b               ldy #$00
+                    lda ($09),y
+                    pha
+                    ldx #$0b
+Le422               lda $e80b,x
+                    sta ($09),y
+                    txa
+                    ldx #$00
+Le42a               dex
+                    bne Le42a
+                    tax
+                    lda ($09),y
+                    and #$0f
+                    cmp $e80b,x
+                    bne Le454
+                    dex
+                    bpl Le422
+                    pla
+                    sta ($09),y
+                    inc $09
+                    bne Le443
+                    inc $0a
+Le443               lda $0a
+                    cmp #$dc
+                    bne Le41b
+                    lda #$0f                ; "O"
+                    sta $04d5
+                    lda #$0b                ; "K"
+                    sta $04d6
+                    lda ColorTextOk
+                    sta $d8d5
+                    sta $d8d6
+                    rts
+                    
+Le454               eor $e80b,x
+                    tax
+                    lda #$02                ; "B"
+                    sta $04d5
+                    lda #$01                ; "A"
+                    sta $04d6
+                    lda #$04                ; "D"
+                    sta $04d7
+                    lda ColorTextBad
+                    sta $d8d5
+                    sta $d8d6
+                    sta $d8d7
+                    jmp RamTest_Error_Bit_0
+
+;---------------------------------------------------------------------------------------------------------------------------
+; RAM Test First 4 kByte
+;---------------------------------------------------------------------------------------------------------------------------
+                    
+Test_RamTest        ldx #$0b
+Test_RamTest_1      lda strRamTest,x
+                    sta $04f0,x
+                    dex
+                    bpl Test_RamTest_1
+                    ldx #$00
+                    ldy #$08
+                    stx $09
+                    sty $0a
+Test_RamTest_2      ldy #$00
+                    ldx #$13
+Test_RamTest_3      lda TestPatterns,x
+                    sta ($09),y
+                    txa
+                    ldx #$7f
+Test_RamTest_4      dex
+                    bne Test_RamTest_4
+                    tax
+                    lda ($09),y
+                    cmp TestPatterns,x
+                    bne Test_RamTest_Error
+                    dex
+                    bpl Test_RamTest_3
+                    inc $09
+                    bne Test_RamTest_5
+                    inc $0a
+Test_RamTest_5      lda $0a
+                    cmp #$10
+                    bne Test_RamTest_2
+                    lda #$0f                ; "O"
+                    sta $04fd
+                    lda #$0b                ; "K"
+                    sta $04fe
+                    lda ColorTextOk
+                    sta $d8fd
+                    sta $d8fe
+                    rts
+                    
+Test_RamTest_Error  eor TestPatterns,x
+                    tax
+                    lda #$02                ; "B"
+                    sta $04fd               
+                    lda #$01                ; "A"
+                    sta $04fe
+                    lda #$04                ; "D"
+                    sta $04ff
+                    lda ColorTextBad
+                    sta $d8fd
+                    sta $d8fe
+                    sta $d8ff
+                    
+RamTest_Error_Bit_0 txa
+                    and #$01
+                    beq RamTest_Error_Bit_1
+                    lda #$02                ; "B"
+                    sta $06a4
+                    lda #$01                ; "A"
+                    sta $06a5
+                    lda #$04                ; "D"
+                    sta $06a6
+                    lda ColorTextBad
+                    sta $daa4
+                    sta $daa5
+                    sta $daa6
+RamTest_Error_Bit_1 txa
+                    and #$02
+                    beq RamTest_Error_Bit_2
+                    lda #$02                ; "B"
+                    sta $06a0
+                    lda #$01                ; "A"
+                    sta $06a1
+                    lda #$04                ; "D"
+                    sta $06a2
+                    lda ColorTextBad
+                    sta $daa0
+                    sta $daa1
+                    sta $daa2
+RamTest_Error_Bit_2 txa
+                    and #$04
+                    beq RamTest_Error_Bit_3
+                    lda #$02                ; "B"
+                    sta $069c
+                    lda #$01                ; "A"
+                    sta $069d
+                    lda #$04                ; "D"
+                    sta $069e
+                    lda ColorTextBad
+                    sta $da9c
+                    sta $da9d
+                    sta $da9e
+RamTest_Error_Bit_3 txa
+                    and #$08
+                    beq RamTest_Error_Bit_4
+                    lda #$02                ; "B"
+                    sta $0698
+                    lda #$01                ; "A"
+                    sta $0699
+                    lda #$04                ; "D"
+                    sta $069a
+                    lda ColorTextBad
+                    sta $da98
+                    sta $da99
+                    sta $da9a
+RamTest_Error_Bit_4 txa
+                    and #$10
+                    beq RamTest_Error_Bit_5
+                    lda #$02                ; "B"
+                    sta $0694
+                    lda #$01                ; "A"
+                    sta $0695
+                    lda #$04                ; "D"
+                    sta $0696
+                    lda ColorTextBad
+                    sta $da94
+                    sta $da95
+                    sta $da96
+RamTest_Error_Bit_5 txa
+                    and #$20
+                    beq RamTest_Error_Bit_6
+                    lda #$02                ; "B"
+                    sta $0690
+                    lda #$01                ; "A"
+                    sta $0691
+                    lda #$04                ; "D"
+                    sta $0692
+                    lda ColorTextBad
+                    sta $da90
+                    sta $da91
+                    sta $da92
+RamTest_Error_Bit_6 txa
+                    and #$40
+                    beq RamTest_Error_Bit_7
+                    lda #$02                ; "B"
+                    sta $068c
+                    lda #$01                ; "A"
+                    sta $068d
+                    lda #$04                ; "D"
+                    sta $068e
+                    lda ColorTextBad
+                    sta $da8c
+                    sta $da8d
+                    sta $da8e
+RamTest_Error_Bit_7 txa
+                    and #$80
+                    beq LoopUntilDoomsday
+                    lda #$02                ; "B"
+                    sta $0688
+                    lda #$01                ; "A"
+                    sta $0689
+                    lda #$04                ; "D"
+                    sta $068a
+                    lda ColorTextBad
+                    sta $da88
+                    sta $da89
+                    sta $da8a
+LoopUntilDoomsday   inc $d020 
+                    jmp LoopUntilDoomsday   ; NO CARRIER
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Sound Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+Test_SoundTest      ldx #$09
+OutText_SoundTest   lda strSoundTest,x
+                    sta $0518,x
+                    dex
+                    bpl OutText_SoundTest
+                    lda #$14
+                    sta $d418
+                    lda #$00
+                    sta $d417
+                    lda #$3e
+                    sta $d405
+                    lda #$ca
+                    sta $d406
+                    lda #$00
+                    sta $d412
+                    lda #$03                ; cycle through 4 waveforms
+TestNextWaveForm    pha                     ; save waveform index on stack
+
+                    ldx #$06                ; play 7 notes
+PlayVoice1          lda SidFreqV1Hi,x       ; on voice #1
+                    sta $d401
+                    lda SidFreqV1Lo,x
+                    sta $d400
+
+                    pla                     ; restore waveform index         
+                    tay                     ; from stack
+                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
+                    sta $d402               ; set pulse width LO              
+                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
+                    sta $d403               ; set pulse width HI              
+                    lda SidWaveForms,y      ; load waveform value for index no. Y
+                    sta $d404               ; set waveform
+                    tya                     ; save waveform index
+                    pha                     ; on stack
+                    
+                    lda #$6a
+                    jsr SoundDelayLoop
+                    lda #$00
+                    sta $d404
+                    lda #$00
+                    jsr SoundDelayLoop
+                    dex
+                    bne PlayVoice1
+                    lda #$00
+                    sta $d417
+                    lda #$18
+                    sta $d418
+                    lda #$3e
+                    sta $d40c
+                    lda #$ca
+                    sta $d40d
+
+                    ldx #$06                ; play 7 notes
+PlayVoice2          lda SidFreqV2Hi,x       ; on voice #2
+                    sta $d408
+                    lda SidFreqV2Lo,x
+                    sta $d407
+                    pla                     ; restore waveform index         
+                    tay                     ; from stack
+                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
+                    sta $d409
+                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
+                    sta $d40a
+                    lda SidWaveForms,y      ; load waveform value for index no. Y
+                    sta $d40b
+                    tya                     ; save waveform index         
+                    pha                     ; on stack
+                    lda #$6a
+                    jsr SoundDelayLoop
+                    lda #$00
+                    sta $d40b
+                    lda #$00
+                    jsr SoundDelayLoop
+                    dex
+                    bne PlayVoice2
+                    lda #$00
+                    sta $d417
+                    lda #$1f
+                    sta $d418
+                    lda #$3e
+                    sta $d413
+                    lda #$ca
+                    sta $d414
+
+                    ldx #$06                ; play 7 notes
+PlayVoice3          lda SidFreqV3Hi,x       ; on voice #3
+                    sta $d40f
+                    lda SidFreqV3Lo,x
+                    sta $d40e
+                    pla
+                    tay
+                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
+                    sta $d410
+                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
+                    sta $d411
+                    lda SidWaveForms,y      ; load waveform value for index no. Y
+                    sta $d412
+                    tya
+                    pha
+                    lda #$6a
+                    jsr SoundDelayLoop
+                    lda #$00
+                    sta $d412
+                    lda #$00
+                    jsr SoundDelayLoop
+                    dex
+                    bne PlayVoice3
+                    pla
+                    tay
+                    dey
+                    tya
+                    bmi SoundTestComplete
+                    jmp TestNextWaveForm    ; start over with next waveform
+                    
+SoundTestComplete   rts
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Delay Loop for Sounds
+;---------------------------------------------------------------------------------------------------------------------------
+
+SoundDelayLoop      cmp #$00
+                    beq SoundDelayLoopCpl
+                    tay
+                    txa
+                    pha
+                    tya
+                    tax
+SoundDelayLoop_1    ldy #$ff
+SoundDelayLoop_2    dey
+                    bne SoundDelayLoop_2
+                    dex
+                    bne SoundDelayLoop_1
+                    pla
+                    tax
+SoundDelayLoopCpl   rts
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; This seems never to be executed ...
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    lda #$37
+                    sta $01
+                    lda #$48
+                    sta $DC0E
+                    lda #$08
+                    sta $DD0E
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; Update TOD1 display
+;---------------------------------------------------------------------------------------------------------------------------
+
+UpdateTod1Display   lda $01                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor #$20                ; 00100000 ; flip CASS MOTOR
+                    eor #$10                ; 00010000 ; flip CASS SENSE
+                    sta $01
+
+                    lda $dc0b               ; test for PM flag
+                    clc
+                    asl
+                    bcc OutText_TOD1_AM
+                    
+                    lda #$10                ; "P"
+                    sta $07db
+                    lda #$0d                ; "M"
+                    sta $07dc
+                    clc
+                    bcc Skip_TOD1_AM
+                    
+OutText_TOD1_AM     lda #$01                ; "A"
+                    sta $07db
+                    lda #$0d                ; "M"
+                    sta $07dc
+
+Skip_TOD1_AM        lda $dc0b               ; read hours
+                    and #$7f                ; only lower 7 bits, PM flag already tested before
+                    ldy #$01                ; two digits
+                    bne Le732
+                    
+Le700               sta $07d3
+                    stx $07d4
+                    lda #$2d                ; "-"
+                    sta $07d5
+                    lda $dc0a
+                    ldy #$02
+                    bne Le732
+Le712               sta $07d6
+                    stx $07d7
+                    lda #$2d                ; "-"
+                    sta $07d8
+                    lda $dc09
+                    ldy #$03
+                    bne Le732
+Le724               sta $07d9
+                    stx $07da
+                    lda $dc08
+                    clc
+                    bcc UpdateTod2Display
+                    ldy #$00
+
+Le732               pha                     ; save value
+                    sty $10                 
+                    ldy #$04
+                    bne Le741
+Le739               ldy $10
+                    tax
+                    pla
+                    lsr
+                    lsr
+                    lsr
+                    lsr
+Le741               and #$0f                ; ones digit
+                    cmp #$0a
+                    bmi Le74c
+                    sec
+                    sbc #$09
+                    bne Le74e
+Le74c               ora #$30
+Le74e               cpy #$01
+                    beq Le700
+                    cpy #$02
+                    beq Le712
+                    cpy #$03
+                    beq Le724
+                    cpy #$04
+                    beq Le739
+                    cpy #$05
+                    beq Le792
+                    cpy #$06
+                    beq Le7a4
+                    cpy #$07
+                    beq Le7b6
+                    rts
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; Update TOD2 display
+;---------------------------------------------------------------------------------------------------------------------------
+
+UpdateTod2Display   lda $dd0b
+                    clc
+                    asl
+                    bcc Le77f
+                    lda #$10
+                    sta $07e6
+                    lda #$0d
+                    sta $07e7
+                    clc
+                    bcc Le789
+Le77f               lda #$01
+                    sta $07e6
+                    lda #$0d
+                    sta $07e7
+Le789               lda $dd0b
+                    and #$7f
+                    ldy #$05
+Le790               bne Le732
+Le792               sta $07de
+                    stx $07df
+                    lda #$2d
+                    sta $07e0
+                    lda $dd0a
+                    ldy #$06
+                    bne Le790
+Le7a4               sta $07e1
+                    stx $07e2
+                    lda #$2d
+                    sta $07e3
+                    lda $dd09
+                    ldy #$07
+                    bne Le790
+Le7b6               sta $07e4
+                    stx $07e5
+                    lda $dd08
+                    rts
+
+;---------------------------------------------------------------------------------------------------------------------------
+; This code/data is obviously not used?
+;---------------------------------------------------------------------------------------------------------------------------
+
+;                   *= $e8a0                                    ; ???
+;                    
+;                   !hex 09 00 28 ff 1f af 
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Strings
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    *= $f900	
+
+strCaption          !scr "   c-64 dead test rev 781220 kinzi 002  " ; 40 chars fixed text (one line)
+strCount            !scr "count"                                    ;  5 chars fixed text
+strZeroPage         !scr "zero page"                                ;  9 chars fixed text
+strStackPage        !scr "stack page"                               ; 10 chars fixed text
+strScreenRam        !scr "screen ram"                               ; 10 chars fixed text   
+strRamTest          !scr "ram test 4kb"                             ;  8 chars fixed text
+strColorRam         !scr "color ram"                                ;  9 chars fixed text
+strSoundTest        !scr "sound test"                               ; 10 chars fixed text
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Constants and Tables
+;---------------------------------------------------------------------------------------------------------------------------
+
+ColorTextOk         !hex 05     ; green
+ColorTextBad        !hex 02     ; red
+
+TestPatterns        !hex 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7 
+                    !hex ef df bf 7f 00 05 0a 0f 01 02 04 08 0e 0d 0b 07 
+
+VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+                    !hex 00 1b 00 00 00 00 08 00 12 00 00 00 00 00 00 00 
+                    !hex 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+Cia1Init            !hex 00 00 00 00 
+
+Cia2Init            !hex 00 00 00 80 
+
+SidFreqV1Hi         !hex 11 15 19 22 19 15 11 
+
+SidFreqV1Lo         !hex 25 9a b1 4b b1 9a 25 
+
+SidFreqV2Hi         !hex 22 2b 33 44 33 2b 22 
+
+SidFreqV2Lo         !hex 4b 34 61 95 61 34 4b 
+
+SidFreqV3Hi         !hex 44 56 66 89 66 56 44 
+
+SidFreqV3Lo         !hex 95 69 c2 2b c2 69 95 
+
+SidWaveForms        !hex 81 45 25 11
+
+SidPWidthLo         !hex 00 00 00 00
+                    
+SidPWidthHi         !hex 00 08 00 00
+
+StatusHeader        !scr 34, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 35
+                    
+                    ;     123456789.123456789.123456789.123456789."
+StatusText          !scr 39, "bit    d7  d6  d5  d4  d3  d2  d1  d0 ", 39
+                    !scr 39, "status ok  ok  ok  ok  ok  ok  ok  ok ", 39
+                    !scr 39, "                                      ", 39
+                    !scr 39, " 4164  u12 u24 u11 u23 u10 u22 u9  u21", 39
+                    !scr 39, "250466 u9  u9  u9  u9  u10 u10 u10 u10", 39
+                    !scr 39, "250469 u11 u11 u11 u11 u10 u10 u10 u10", 39
+                    !hex ff
+
+StatusColor         !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
+                    !hex 02 06 06 06 06 06 06 06 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
+                    !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
+                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
+                    !hex 02 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
+                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
+                    !hex ff 
+
+StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Integrated character set 
+; Originally 58 chars from 0..57, location in 781220 was $EAD8..$ECA7
+; Now extended to 63 chars standard PETSCII. 
+; Chars 34..39 replaced with PETSCII for drawing the frame.
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    *= $fdfa                            ; 6 bytes CPU vectors follow behind
+:CharSet            !hex 3c 66 6e 6e 60 62 3c 00        ; @
+;
+; "Comic" character set disabled
+;                        
+;                    !hex 7e 42 42 7e 46 46 46 00        ; A
+;                    !hex 7e 62 62 7e 62 62 7e 00        ; B 
+;                    !hex 7e 42 40 40 40 42 7e 00        ; C
+;                    !hex 7e 42 42 62 62 62 7e 00        ; D
+;                    !hex 7e 60 60 78 70 70 7e 00        ; E
+;                    !hex 7e 60 60 78 70 70 70 00        ; F
+;                    !hex 7e 42 40 6e 62 62 7e 00        ; G
+;                    !hex 42 42 42 7e 62 62 62 00        ; H
+;                    !hex 10 10 10 18 18 18 18 00        ; I
+;                    !hex 04 04 04 06 06 66 7e 00        ; J
+;                    !hex 42 44 48 7e 66 66 66 00        ; K
+;                    !hex 40 40 40 60 60 60 7e 00        ; L
+;                    !hex 43 67 5b 43 43 43 43 00        ; M
+;                    !hex e2 d2 ca c6 c2 c2 c2 00        ; N
+;                    !hex 7e 42 42 46 46 46 7e 00        ; O
+;                    !hex 7e 42 42 7e 60 60 60 00        ; P
+;                    !hex 7e 42 42 62 6a 66 7e 00        ; Q
+;                    !hex 7e 42 42 7e 68 64 62 00        ; R
+;                    !hex 7e 42 40 7e 02 62 7e 00        ; S
+;                    !hex 7e 18 18 18 18 18 18 00        ; T
+;                    !hex 62 62 62 62 62 62 3c 00        ; U
+;                    !hex 62 62 62 62 62 24 18 00        ; V
+;                    !hex c2 c2 c2 c2 da e6 c2 00        ; W
+;                    !hex 62 62 24 18 24 62 62 00        ; X
+;                    !hex 62 62 62 34 18 18 18 00        ; Y
+;                    !hex 7f 03 06 08 10 60 7f 00        ; Z
+;
+                    !hex 18 3c 66 7e 66 66 66 00        ; A  
+                    !hex 7c 66 66 7c 66 66 7c 00        ; B 
+                    !hex 3c 66 60 60 60 66 3c 00        ; C
+                    !hex 78 6c 66 66 66 6c 78 00        ; D
+                    !hex 7e 60 60 78 60 60 7e 00        ; E
+                    !hex 7e 60 60 78 60 60 60 00        ; F
+                    !hex 3c 66 60 6e 66 66 3c 00        ; G
+                    !hex 66 66 66 7e 66 66 66 00        ; H
+                    !hex 3c 18 18 18 18 18 3c 00        ; I
+                    !hex 1e 0c 0c 0c 0c 6c 38 00        ; J
+                    !hex 66 6c 78 70 78 6c 66 00        ; K
+                    !hex 60 60 60 60 60 60 7e 00        ; L
+                    !hex 63 77 7f 6b 63 63 63 00        ; M
+                    !hex 66 76 7e 7e 6e 66 66 00        ; N
+                    !hex 3c 66 66 66 66 66 3c 00        ; O
+                    !hex 7c 66 66 7c 60 60 60 00        ; P
+                    !hex 3c 66 66 66 66 3c 0e 00        ; Q
+                    !hex 7c 66 66 7c 78 6c 66 00        ; R
+                    !hex 3c 66 60 3c 06 66 3c 00        ; S
+                    !hex 7e 18 18 18 18 18 18 00        ; T
+                    !hex 66 66 66 66 66 66 3c 00        ; U
+                    !hex 66 66 66 66 66 3c 18 00        ; V
+                    !hex 63 63 63 6b 7f 77 63 00        ; W
+                    !hex 66 66 3c 18 3c 66 66 00        ; X
+                    !hex 66 66 66 3c 18 18 18 00        ; Y
+                    !hex 7e 06 0c 18 30 60 7e 00        ; Z
+                    !hex 3c 30 30 30 30 30 3c 00        ; [
+                    !hex 0e 10 30 fe 30 60 ff 00        ; <pound symbol>
+                    !hex 3c 0c 0c 0c 0c 0c 3c 00        ; ]
+                    !hex 00 18 3c 7e 18 18 18 18        ; <arrow up>
+                    !hex 00 10 30 7f 7f 30 10 00        ; <arrow left>
+                    !hex 00 00 00 00 00 00 00 00        ; <space>
+                    !hex 18 18 18 18 00 00 18 00        ; !
+                    !hex 00 00 00 07 0f 1c 18 18        ; <frame upper left corner>
+                    !hex 00 00 00 e0 f0 38 18 18        ; <frame upper right corner>
+                    !hex 18 18 1c 0f 07 00 00 00        ; <frame lower left corner>
+                    !hex 18 18 38 f0 e0 00 00 00        ; <frame lower right corner>
+                    !hex 00 00 00 ff ff 00 00 00        ; <frame horizontal line>
+                    !hex 18 18 18 18 18 18 18 18        ; <frame vertical line>
+                    !hex 0c 18 30 30 30 18 0c 00        ; (
+                    !hex 30 18 0c 0c 0c 18 30 00        ; )
+                    !hex 00 66 3c ff 3c 66 00 00        ; *
+                    !hex 00 18 18 7e 18 18 00 00        ; +
+                    !hex 00 00 00 00 00 18 18 30        ; ,
+                    !hex 00 00 00 7e 00 00 00 00        ; -
+                    !hex 00 00 00 00 00 18 18 00        ; .
+                    !hex 00 03 06 0c 18 30 60 00        ; /
+;
+; "Comic" character set disabled
+;                        
+;                    !hex 7e 42 42 42 42 42 7e 00        ; 0
+;                    !hex 30 30 10 10 3c 3c 3c 00        ; 1
+;                    !hex 7e 02 02 7e 40 40 7e 00        ; 2
+;                    !hex 7e 02 02 7e 06 06 7e 00        ; 3
+;                    !hex 60 60 60 66 7e 06 06 00        ; 4
+;                    !hex 7e 40 40 7e 02 02 7e 00        ; 5
+;                    !hex 78 48 40 7e 42 42 7e 00        ; 6
+;                    !hex 7e 42 04 08 08 08 08 00        ; 7
+;                    !hex 3c 24 24 3c 66 66 7e 00        ; 8
+;                    !hex 7e 42 42 7e 06 06 06 00        ; 9
+;
+                    !hex 3c 66 6e 76 66 66 3c 00        ; 0
+                    !hex 18 18 38 18 18 18 7e 00        ; 1
+                    !hex 3c 66 06 0c 30 60 7e 00        ; 2
+                    !hex 3c 66 06 1c 06 66 3c 00        ; 3
+                    !hex 06 0e 1e 66 7f 06 06 00        ; 4
+                    !hex 7e 60 7c 06 06 66 3c 00        ; 5
+                    !hex 3c 66 60 7c 66 66 3c 00        ; 6
+                    !hex 7e 66 0c 18 18 18 18 00        ; 7
+                    !hex 3c 66 66 3c 66 66 3c 00        ; 8
+                    !hex 3c 66 66 3e 06 66 3c 00        ; 9
+                    !hex 00 00 00 18 00 00 18 00        ; :
+                    !hex 00 00 18 00 00 18 18 30        ; ;
+                    !hex 0e 18 30 60 30 18 0e 00        ; <
+                    !hex 00 00 7e 00 7e 00 00 00        ; = 
+                    !hex 70 18 0c 06 0c 18 70 00        ; >
+                    !hex 3c 66 06 0c 18 00 18 00        ; ? 
+                    
+;---------------------------------------------------------------------------------------------------------------------------
+; CPU vectors
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    *= $fffa	
+
+                    !hex 00 f0 00 f0 00 f0
+
