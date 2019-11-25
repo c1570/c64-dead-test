@@ -1,4 +1,4 @@
-C-64 Dead Test Rev 781220 kinzi 003
+C-64 Dead Test Rev 781220 kinzi 004
 ===================================
 
 (Deutsche Version nachstehend / German version below.)
@@ -27,7 +27,7 @@ former life. :-) So please have mercy with me ...
 * Sound test now plays four wave forms including noise and "in right order" -
   triangle, sawtooth, square, noise.
 
-* "BAD" on tests leads to infinitive loop already in original verion. This is
+* "BAD" on tests led to infinitive loop already in original verion. This is
   now announced by cycling through the border colors in this loop, as done
   in Easy Flash 3 when unable to reset.
   
@@ -55,24 +55,32 @@ News in 003:
   
 * Bug fix: ram error blinking sequence was broken, always blinked just one
   time not corresponding to regarding bit.
+
+News in 004:
+
+* Bug fix: LEDs were not blinking any more during tests because of a typo.
+
+* The LEDs flip their status now even during initial RAM test, just when the
+  border color is decremented. They also change their status after Zero Page
+  and Stack test.
   
 ------------
 
 Ich habe das originale C-64 DEAD TEST REV 781220 mit dem "WFDis" Disassemler
 (https://www.white-flame.com/wfdis/), den Code weitgehend kommentiert 
 sowie einige Dinge umgestellt (Strings, Tabellen, Zeichensatz usw.), ans
-ACME-Format angepasst und (hoffentlich :-) einige DInge verbessert.
+ACME-Format angepasst und (hoffentlich :-) einige Dinge verbessert.
 
 Ich bin weder ein ACME-Experte noch ein begnadeter Programmierer, daher wird
 vermutlich vieles schöner oder einfacher zu lösen sein, auch weil das mein
-erstes "Projekt" ist, frü das ich ACME verwendet, bzw. überhaupt einen 
+erstes "Projekt" ist, für das ich ACME verwendet habe; bzw. überhaupt einen 
 Assembler, denn bisher habe ich Assembler immer nur im Monitor gecodet. :-)
 Ich bitte also um Nachsicht. :-)
 
 * Die Rahmenfarbe wird beim zweiten Befehl (nach dem initialen SEI) auf 
   hellgrau gestellt, also so früh wie möglich. Wenn die CPU den Reset-Vektor
   lesen kann und startet, dann aber nach ein paar Befehlen crasht bleibt der
-  Rahmen (und damit der Hintergrund) hellgrau. In der Orioginalversion ist er
+  Rahmen (und damit der Hintergrund) hellgrau. In der Originalversion ist er
   zu diesem Zeitpunkt schwarz - das ist der Standardwert des VIC beim 
   Einschalten.
   
@@ -86,19 +94,20 @@ Ich bitte also um Nachsicht. :-)
   in der "richtigen" Reihenfolge (Dreicke, Sägezahn, Rechteck, Rauschen).
   
 * Trifft der RAM-Test auf Fehler und wirft BAD neben den IC-Bezeichnungen
-  aus, wird in eine Endlosschleife gesprungen, auch bereits bei der Original-
-  Version. Jetzt wird in dieser Endlosschleife die Rahmenfarbe durchgerollt,
-  wie es das Easy Flash 3 auch macht, wenn es keinen Reset auslösen konnte.
+  aus, wird in eine Endlosschleife gesprungen, wie auch bereits bei der
+  Original-Version. Jetzt wird in dieser Endlosschleife die Rahmenfarbe
+  durchgerollt, wie es das Easy Flash 3 auch macht, wenn es keinen Reset
+  auslösen konnte.
   
 * Der Bildschirmaufbau wurde etwas überarbeitet, es werden nun die
   Bezeichnungen der Datenleitungen neben den IC-Namen angeführt, ebenso wie
-  die (abweochenden) IC-Numemrn der 250466 und 250469; dies erleichtert 
-  Reparaturen. :-) Tests mit Ergebnis "OK" erscheint dieses nun in grün.
+  die (abweichenden) IC-Nummern der 250466 und 250469; dies erleichtert 
+  Reparaturen. :-) Bei Tests mit Ergebnis "OK" erscheint dieses nun in grün.
   
 * Am TAPE-Port können zwei Low-Current-LEDs, jeweils an "MOTOR" und "SENSE"
   angeschlossen werden, über jeweils einen Widerstand von mindestens 1 kOhm
   zum Schutz des I/O-Ports der CPU. Die LEDs wechseln ihren Status bei jedem
-  Update der Uhren-Anzeige rechts unten, also so ca. alle 20 Sekunden.
+  Update der Uhren-Anzeige rechts unten, also ca. alle 20 Sekunden.
   Außerdem blinken sie mit dem Bildschirm mit, wenn beim initialen RAM-Test
   ein Fehler festgestellt wird. Das ist vor allem auf Rechnern mit kaputter
   Bildschirmausgabe interessant.
@@ -117,6 +126,15 @@ Neues in 003:
 
 * Bug fix: Das "RAM-Fehlerblinken" war kaputt, es hat nur noch einmal 
   geblinkt, unabhängig vom betroffenen Bit.
+
+Neues in 004:
+
+* Bug fix: Die LEDs hatten nicht mehr geblinkt während der Tests auf Grund
+  eines Tippfehlers.
+
+* Die LEDs ändern ihren Status nun auch während des initialen RAM-Tests, 
+  gemeinsam mit der Rahmenfarbe. Außerdem werden sie auch nach dem Zero Page
+  und dem Stack Test umgeschaltet.
 
 ------------
 

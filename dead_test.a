@@ -1,11 +1,11 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220 KINZI 003"
+; "C-64 DEAD TEST REV 781220 KINZI 004"
 ;
 ; Disassembled source code of original Dead Test - copyright, credits, status unknown.
 ; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    !to "dead_test_kinzi_003.bin", plain
+                    !to "dead_test_kinzi_004.bin", plain
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -85,10 +85,11 @@ Reset_Handler       sei
 ; Main Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
-CopyCharSet1        lda #$d7                ; xx010xxx : CASS MOTOR = 0,   CASS SENSE = 1,   CASS WRITE = 0
+CopyCharSet1        lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
                     sta $01
 
-                    lda #<CharSet           ; copy char set to $0800
+					lda #<CharSet           ; copy char set to $0800
                     ldx #>CharSet
                     sta $09
                     stx $0a
@@ -218,12 +219,12 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
                     ora #$30
                     sta $07c6
 
-                    lda #$37                ; xx110xxx : CASS MOTOR = 1, CASS SENSE = 1 (CASS WRITE = in)
-                    sta $01
-
                     jmp Test_ZeroPage       ; use JMP because stack is not reliable yet
-                    
-BackFromZPTest      jmp Test_StackPage      ; atill use JMP because stack is still not reliable yet
+					
+BackFromZPTest      lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
+					sta $01
+					jmp Test_StackPage      ; still use JMP because stack is still not reliable yet
                     
 BackFromStackTest   jsr UpdateTod1Display
                     jsr Test_ScreenRam
@@ -264,10 +265,9 @@ CopyCharSet2_2      lda ($09),y
                     sta $03
                     cld
                     
-                    lda #$e7                ; 11100111 : CASS MOTOR = 1,   CASS SENSE = 0,   CASS WRITE = 0
+                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
                     sta $01
-                    lda #$37                ; 00110111 : CASS MOTOR = out, CASS SENSE = out, CASS WRITE = in
-                    sta $00
 
                     lda #$00                ; shut down SID
                     sta $d418
@@ -311,9 +311,10 @@ NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
                     bne NextTestPattern     ; loop on
 
                     dec $d020               ; activity control
-                    lda $30                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
                     eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    
+                    sta $01
+					
                     txa                     ; save X in A
 
                     ldx #$00
@@ -433,9 +434,10 @@ Le2a6               lda #$01
                     sta $d020
                     sta $d021
 
-                    lda #$f7                ; xx110xxx : CASS MOTOR = 1,   CASS SENSE = 1,   CASS WRITE = 0
-                    sta $01
-
+                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
+					sta $01
+					
                     txa
                     ldx #$7f
                     ldy #$00
@@ -448,9 +450,10 @@ Le2b3               dey
                     sta $d020
                     sta $d021
 
-                    lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
-                    sta $01
-
+                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
+					sta $01
+					
                     txa
                     ldx #$7f
                     ldy #$00
@@ -1034,9 +1037,10 @@ SoundDelayLoopCpl   rts
 ; Update TOD1 display
 ;---------------------------------------------------------------------------------------------------------------------------
 
-UpdateTod1Display   lda $30                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+UpdateTod1Display   lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
                     eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-
+					sta $01
+					
                     lda $dc0b               ; test for PM flag
                     clc
                     asl
@@ -1169,7 +1173,7 @@ Le7b6               sta $07e4
 
                     *= $f900	
 
-strCaption          !scr "   c-64 dead test rev 781220 kinzi 003  " ; 40 chars fixed text (one line)
+strCaption          !scr "   c-64 dead test rev 781220 kinzi 004  " ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
