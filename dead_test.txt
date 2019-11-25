@@ -1,4 +1,4 @@
-C-64 Dead Test Rev 781220 kinzi 002
+C-64 Dead Test Rev 781220 kinzi 003
 ===================================
 
 (Deutsche Version nachstehend / German version below.)
@@ -48,6 +48,14 @@ former life. :-) So please have mercy with me ...
 Use the source code for whatever you want (it isn't even mine in large parts)
 but be fair and give credits ;-) ...
 
+News in 003:
+
+* Border color is decremented during initial RAM test, providing a primitive
+  way of "progess status".
+  
+* Bug fix: ram error blinking sequence was broken, always blinked just one
+  time not corresponding to regarding bit.
+  
 ------------
 
 Ich habe das originale C-64 DEAD TEST REV 781220 mit dem "WFDis" Disassemler
@@ -101,7 +109,16 @@ Ich bitte also um Nachsicht. :-)
 Macht mit dem Source-Code, was ihr wollt (ist großteils eh nicht meiner :-),
 aber schmückt euch nicht damit und "gebt credits". ;-)
 
+Neues in 003:
+
+* Die Rahmenfarbe wird während des initialen RAM Tests nun bei jedem neuen
+  Testpattern dekrementiert und stellt daher eine einfache Verlaufskontrolle
+  dar.
+
+* Bug fix: Das "RAM-Fehlerblinken" war kaputt, es hat nur noch einmal 
+  geblinkt, unabhängig vom betroffenen Bit.
+
 ------------
 
-kinzi, 2019-11-18
+kinzi, 2019-11-25
   

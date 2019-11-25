@@ -1,11 +1,11 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220 KINZI 002"
+; "C-64 DEAD TEST REV 781220 KINZI 003"
 ;
 ; Disassembled source code of original Dead Test - copyright, credits, status unknown.
 ; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    !to "dead_test_kinzi_002.bin", plain
+                    !to "dead_test_kinzi_003.bin", plain
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -70,6 +70,8 @@
 
 Reset_Handler       sei
                     dec $d020               ; patch by kinzi: set screen color to different color (from black) as early as possible
+                    ldx #$ff                ; 
+                    txs
                     cld
 
                     lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
@@ -287,12 +289,7 @@ ClearUpperScreen_2  sta $0600,x
 ; Initial RAM Test 
 ;---------------------------------------------------------------------------------------------------------------------------
 
-InitialRamTest      lda #$03                ; background color at initial RAM test
-                    ldx #$ff                ; patched by kinzi: relocated stack init to gain space for DEC d020 at begin
-                    txs
-                    sta $d020               ; 
-                    sta $d021               ; 
-                    ldx #$15                ; 22 test patterns
+InitialRamTest      ldx #$15                ; 22 test patterns
                     ldy #$00
 NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
                     sta $0100,y             ; write to RAM pages
@@ -312,6 +309,11 @@ NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
                     sta $0f00,y
                     iny
                     bne NextTestPattern     ; loop on
+
+                    dec $d020               ; activity control
+                    lda $30                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
+                    
                     txa                     ; save X in A
 
                     ldx #$00
@@ -382,10 +384,7 @@ JumpToStartOver     jmp CopyCharSet1        ; back to begin (the whole block of 
 
 ;---------------------------------------------------------------------------------------------------------------------------
 
-BlinkOutRamError    lda #$c7                ; xx000xxx : CASS MOTOR = 0,   CASS SENSE = 0,   CASS WRITE = 0
-                    sta $01
-
-                    eor TestPatterns,x
+BlinkOutRamError    eor TestPatterns,x
                     tax
                     and #$fe
                     bne Le267
@@ -1035,10 +1034,8 @@ SoundDelayLoopCpl   rts
 ; Update TOD1 display
 ;---------------------------------------------------------------------------------------------------------------------------
 
-UpdateTod1Display   lda $01                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor #$20                ; 00100000 ; flip CASS MOTOR
-                    eor #$10                ; 00010000 ; flip CASS SENSE
-                    sta $01
+UpdateTod1Display   lda $30                 ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
 
                     lda $dc0b               ; test for PM flag
                     clc
@@ -1172,7 +1169,7 @@ Le7b6               sta $07e4
 
                     *= $f900	
 
-strCaption          !scr "   c-64 dead test rev 781220 kinzi 002  " ; 40 chars fixed text (one line)
+strCaption          !scr "   c-64 dead test rev 781220 kinzi 003  " ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
