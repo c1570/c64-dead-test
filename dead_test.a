@@ -1,11 +1,11 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220 KINZI 004"
+; "C-64 DEAD TEST REV 781220 KINZI 005"
 ;
 ; Disassembled source code of original Dead Test - copyright, credits, status unknown.
 ; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    !to "dead_test_kinzi_004.bin", plain
+                    !to "dead_test_kinzi_005.bin", plain
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -46,7 +46,7 @@
 ; Initial RAM Test      = cyan            		 CASS MOTOR = 0 ; CASS SENSE = 0
 ; Main Test             = (standard)             CASS MOTOR = 0 ; CASS SENSE = 1 (swap every TOD clock update)
 ;
-; At RAM test erros blink both LEDs just like screen color
+; At RAM test errors blink both LEDs just like screen color
 ;
 ;---------------------------------------------------------------------------------------------------------------------------
 
@@ -676,7 +676,7 @@ Le41b               ldy #$00
                     lda ($09),y
                     pha
                     ldx #$0b
-Le422               lda $e80b,x
+Le422               lda ColorRamTP,x
                     sta ($09),y
                     txa
                     ldx #$00
@@ -685,7 +685,7 @@ Le42a               dex
                     tax
                     lda ($09),y
                     and #$0f
-                    cmp $e80b,x
+                    cmp ColorRamTP,x
                     bne Le454
                     dex
                     bpl Le422
@@ -706,7 +706,7 @@ Le443               lda $0a
                     sta $d8d6
                     rts
                     
-Le454               eor $e80b,x
+Le454               eor ColorRamTP,x
                     tax
                     lda #$02                ; "B"
                     sta $04d5
@@ -1173,7 +1173,7 @@ Le7b6               sta $07e4
 
                     *= $f900	
 
-strCaption          !scr "   c-64 dead test rev 781220 kinzi 004  " ; 40 chars fixed text (one line)
+strCaption          !scr "   c-64 dead test rev 781220 kinzi 005  " ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
@@ -1190,7 +1190,9 @@ ColorTextOk         !hex 05     ; green
 ColorTextBad        !hex 02     ; red
 
 TestPatterns        !hex 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7 
-                    !hex ef df bf 7f 00 05 0a 0f 01 02 04 08 0e 0d 0b 07 
+                    !hex ef df bf 7f    
+
+ColorRamTP          !hex 00 05 0a 0f 01 02 04 08 0e 0d 0b 07 
 
 VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
                     !hex 00 1b 00 00 00 00 08 00 12 00 00 00 00 00 00 00 

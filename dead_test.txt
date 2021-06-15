@@ -1,4 +1,4 @@
-C-64 Dead Test Rev 781220 kinzi 004
+C-64 Dead Test Rev 781220 kinzi 005
 ===================================
 
 (Deutsche Version nachstehend / German version below.)
@@ -38,12 +38,17 @@ former life. :-) So please have mercy with me ...
   
 * Two low-current LEDs can be connected to TAPE Port on lines "MOTOR" and 
   "SENSE" to show activity even on systems with no screen output. They should
-  be connected to ground via a 1 kOhm or greater resistor to protect to CPU 
+  be connected to ground via a 1,8 kOhm or greater resistor to protect to CPU 
   port. The LEDs will flip their status every time the TOD clock display is 
   updated (every 20 seconds or so) and will blink together with the screen 
   if RAM error are "blinked" out during initial RAM test.
   
   Check64 V2.0 from GMP@Forum64 is planned to incorporate these two LEDs.
+  
+  In former versions I proposed 1 kOhm resistors but that seems a too small
+  value right now. CPU die shots show that the CPU port is built very similar
+  to the 6522 outputs on Port A (push-pull), so I'd presume the outputs can
+  source/sink a similar amount of current safely resp. sinking max. 1.6 mA.
 
 Use the source code for whatever you want (it isn't even mine in large parts)
 but be fair and give credits ;-) ...
@@ -64,6 +69,10 @@ News in 004:
   border color is decremented. They also change their status after Zero Page
   and Stack test.
   
+News in 005:
+
+* Bug fix: Color RAM was always tested with pattern "00" only. Fixed.
+
 ------------
 
 Ich habe das originale C-64 DEAD TEST REV 781220 mit dem "WFDis" Disassemler
@@ -105,12 +114,18 @@ Ich bitte also um Nachsicht. :-)
   Reparaturen. :-) Bei Tests mit Ergebnis "OK" erscheint dieses nun in grün.
   
 * Am TAPE-Port können zwei Low-Current-LEDs, jeweils an "MOTOR" und "SENSE"
-  angeschlossen werden, über jeweils einen Widerstand von mindestens 1 kOhm
+  angeschlossen werden, über jeweils einen Widerstand von mindestens 1,8 kOhm
   zum Schutz des I/O-Ports der CPU. Die LEDs wechseln ihren Status bei jedem
   Update der Uhren-Anzeige rechts unten, also ca. alle 20 Sekunden.
   Außerdem blinken sie mit dem Bildschirm mit, wenn beim initialen RAM-Test
   ein Fehler festgestellt wird. Das ist vor allem auf Rechnern mit kaputter
   Bildschirmausgabe interessant.
+
+  In einer früheren Anleitung ahbe ich 1 kOhm-Vorwiderstände vorgeschlagen,
+  was sich jetzt als vermutlich zu klein herausstellt. Die-Shots der CPU 
+  zeigen, dass die CPU-Port-Ausgänge sehr ähnlich den "6522-Port-A"-Ausgängen
+  aufgebaut sind und daher wohl ähnliche Ströme liefern können, das wären
+  ca. 1,6 mA. 
   
   Das Check64 V2.0 von GMP aus dem Forum64 wird diese LEDs voraussichtlich
   bereits mitbringen.
@@ -135,6 +150,11 @@ Neues in 004:
 * Die LEDs ändern ihren Status nun auch während des initialen RAM-Tests, 
   gemeinsam mit der Rahmenfarbe. Außerdem werden sie auch nach dem Zero Page
   und dem Stack Test umgeschaltet.
+
+Neues in 005:
+
+* Bug fix: Das Color RAM wurde immer nur mit dem Test-Pattern "00" getestet.
+  Behoben.
 
 ------------
 
