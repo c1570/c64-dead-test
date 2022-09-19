@@ -1,4 +1,4 @@
-C-64 Dead Test Rev 781220 kinzi 005
+C-64 Dead Test Rev 781220 kinzi 006
 ===================================
 
 (Deutsche Version nachstehend / German version below.)
@@ -72,6 +72,24 @@ News in 004:
 News in 005:
 
 * Bug fix: Color RAM was always tested with pattern "00" only. Fixed.
+
+News in 006:
+
+* It seems 28C64 EEPROMs sometimes lead to problems with Dead Test 005. No
+  idea why, couldn't reproduce it here. If you encounter troubles during
+  Initial RAM Test try using a 27(C)64 EPROM instead.
+  
+* Bug fix: CIAs' real time clocks were not properly initialized, leading to
+  a wrong startup time (11-00-00 instead of 00-00-00). Bug was introduced 
+  with 001. :-)
+  
+* Bug fix: No Interrupt Service Routine (ISR) was defined before, the IRQ
+  vector pointed to $F000. Could lead to problems if IRQ is clamped to GND.
+  An ISR containing a simple "RTI" is now provided.
+  
+* Changed initial color change method from DEC to STX in (rare) case of wrong
+  "read modify write" operations happening with a bad CPU.
+
 
 ------------
 
@@ -156,7 +174,27 @@ Neues in 005:
 * Bug fix: Das Color RAM wurde immer nur mit dem Test-Pattern "00" getestet.
   Behoben.
 
+Neues in 006:
+
+* Offenbar führt die Verwendung von 28C64 EEPROMs manchmal zu Problemen mit 
+  Dead Test 005 - keine Ahnung, wieso; ich konnte das nicht nachstellen.
+  Falls es damit Probleme geben sollte, bitte stattdessen ein 27(C)64 EPROM 
+  verwenden.
+  
+* Bug fix: Die Echtzeituhren in den CIAs wurden nicht richtig initialisiert,
+  was zu einer falschen Uhrzeitanzeige beim Start führte (11-00-00 statt 
+  00-00-00). Der Bug wurde mit 001 "eingeführt". :-) 
+  
+* Bug fix: Bisher war keine Interrupt Service Routine (ISR) definiert, der 
+  IRQ-Vektor zeigte auf $F000. Das konnte zu Problemen führen, wenn die IRQ-
+  Leitung durch einen Fehler auf GND klemmt. Es existiert nun eine ISR 
+  bestehend aus einem einfachen "RTI".
+  
+* Die Methode, um ganz am Anfang die Rahmenfarbe zu ändern, wurde von einem
+  DEC auf ein STX geändert - für den (seltenen) Fall, dass die CPU Probleme
+  mit "Read Modify Write"-Operationen hätte.
+
 ------------
 
-kinzi, 2019-11-25
+kinzi, 2022-09-18
   

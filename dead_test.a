@@ -1,11 +1,11 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220 KINZI 005"
+; "C-64 DEAD TEST REV 781220 KINZI 006"
 ;
 ; Disassembled source code of original Dead Test - copyright, credits, status unknown.
 ; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    !to "dead_test_kinzi_005.bin", plain
+                    !to "dead_test_kinzi_006.bin", plain
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -42,11 +42,34 @@
 ;
 ; Using startup colors like in Amiga self diag at startup ...
 ;
-; Startup               = light gray             CASS MOTOR = 1 ; CASS SENSE = 1 (CPU default)
-; Initial RAM Test      = cyan            		 CASS MOTOR = 0 ; CASS SENSE = 0
+; Startup               = light grey             CASS MOTOR = 1 ; CASS SENSE = 1 (CPU default)
+;
+; Initial RAM Test using test patterns 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7 ef df bf 7f
+;
+; Pattern 00 "00000000"   -> light grey       		 CASS MOTOR = 0 ; CASS SENSE = 0 - inverted on every single next step
+; Pattern 55 "01010101"   -> light blue
+; Pattern aa "10101010"   -> light green
+; Pattern ff "11111111"   -> grey
+; Pattern 01 "00000001"   -> dark grey
+; Pattern 02 "00000010"   -> light red
+; Pattern 04 "00000100"   -> brown
+; Pattern 08 "00001000"   -> orange
+; Pattern 10 "00010000"   -> yellow
+; Pattern 20 "00100000"   -> blue
+; Pattern 40 "01000000"   -> green
+; Pattern 80 "10000000"   -> purple
+; Pattern fe "10000000"   -> purple
+; Pattern fd "11111110"   -> cyan
+; Pattern fb "11111101"   -> red
+; Pattern f7 "11111011"   -> white
+; Pattern ef "11110111"   -> black
+; Pattern df "11101111"   -> light grey
+; Pattern bf "11011111"   -> light blue
+; Pattern 7f "10111111"   -> light green
+;
 ; Main Test             = (standard)             CASS MOTOR = 0 ; CASS SENSE = 1 (swap every TOD clock update)
 ;
-; At RAM test errors blink both LEDs just like screen color
+; On RAM test errors both LEDs just blink in sync with the border screen color
 ;
 ;---------------------------------------------------------------------------------------------------------------------------
 
@@ -69,8 +92,8 @@
 ;---------------------------------------------------------------------------------------------------------------------------
 
 Reset_Handler       sei
-                    dec $d020               ; patch by kinzi: set screen color to different color (from black) as early as possible
-                    ldx #$ff                ; 
+                    ldx #$ff                
+                    stx $d020               ; patch by kinzi: set screen color to different color (from black) as early as possible
                     txs
                     cld
 
@@ -107,14 +130,14 @@ CopyCharSet1_1      lda ($09),y
                     inc $0c
                     dex
                     bpl CopyCharSet1_1
-                    
-CiaRegInit1         ldx #$03
+
+CiaRegInit1         ldx #$04
 CiaRegInit1_1       lda Cia1Init,x          ; CIA init
                     sta $dc07,x
                     lda Cia2Init,x
                     sta $dd07,x
                     dex
-                    bpl CiaRegInit1_1
+                    bne CiaRegInit1_1
                     ldx #$00
                     stx $02
                     stx $03
@@ -1173,7 +1196,7 @@ Le7b6               sta $07e4
 
                     *= $f900	
 
-strCaption          !scr "   c-64 dead test rev 781220 kinzi 005  " ; 40 chars fixed text (one line)
+strCaption          !scr "   c-64 dead test rev 781220 kinzi 006  " ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
@@ -1198,9 +1221,9 @@ VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
                     !hex 00 1b 00 00 00 00 08 00 12 00 00 00 00 00 00 00 
                     !hex 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00 
 
-Cia1Init            !hex 00 00 00 00 
+Cia1Init            !hex 00 00 00 00 00 
 
-Cia2Init            !hex 00 00 00 80 
+Cia2Init            !hex 00 00 00 00 80 
 
 SidFreqV1Hi         !hex 11 15 19 22 19 15 11 
 
@@ -1247,6 +1270,10 @@ StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
 ; Now extended to 63 chars standard PETSCII. 
 ; Chars 34..39 replaced with PETSCII for drawing the frame.
 ;---------------------------------------------------------------------------------------------------------------------------
+
+                    *= $fdf0                            ; Interrupt service routine
+                    
+:ISR                rti
 
                     *= $fdfa                            ; 6 bytes CPU vectors follow behind
 :CharSet            !hex 3c 66 6e 6e 60 62 3c 00        ; @
@@ -1364,5 +1391,5 @@ StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
 
                     *= $fffa	
 
-                    !hex 00 f0 00 f0 00 f0
+                    !hex 00 f0 00 f0 f0 fd
 
