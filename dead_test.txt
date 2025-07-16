@@ -1,3 +1,9 @@
+
+
+THESE ARE KINZI'S NOTES WHICH ARE MOSTLY KEPT FOR HISTORICAL PURPOSES.
+SEE THE README AT https://github.com/c1570/c64-dead-test FOR UP TO DATE INFO.
+
+
 C-64 Dead Test Rev 781220 kinzi 006
 ===================================
 
