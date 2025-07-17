@@ -1,11 +1,13 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220 KINZI 006"
+; "C-64 DEAD TEST REV 781220"
+; https://github.com/c1570/c64-dead-test
 ;
 ; Disassembled source code of original Dead Test - copyright, credits, status unknown.
-; Comments, "improvements", fixes, etc. by kinzi @ Forum64, see https://www.forum64.de/
+; Comments, "improvements", fixes, etc., up to 006 by kinzi @ Forum64, see https://www.forum64.de/
+; More recent changes authors see Git
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    !to "dead_test_kinzi_006.bin", plain
+                    !to "dead_test.bin", plain
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -106,6 +108,8 @@ Reset_Handler       sei
                     
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Main Test
+; Stack and ZP have tested okay in initial RAM test, so we're free to use those from here on.
+; Still, keep testing - problems may occur once the machine has warmed up
 ;---------------------------------------------------------------------------------------------------------------------------
 
 CopyCharSet1        lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
@@ -400,11 +404,40 @@ ReCheckTestPattern  lda $0100,y             ; now re-read RAM pages and compare 
 ErrorHandler        jmp BlinkOutRamError               ; error handler for RAM Test errors
                     
 PatternComplete     dex                     ; no errors, continue with next pattern
-                    bmi JumpToStartOver     ; all pattern tested?
+                    bmi Thorough512Test     ; all patterns tested?
                     ldy #$00                ; no
                     jmp NextTestPattern     ; run RAM test with next pattern
                     
-JumpToStartOver     jmp CopyCharSet1        ; back to begin (the whole block of initial RAM test was obviously added later)
+Thorough512Test     ldx #$00                ; do a slightly more thorough check on ZP/stack
+--                  ldy #$02
+                    stx $d020
+-                   txa
+                    sta $0000,y             ; write 0,1,2,3,4... to $0002... (in run 0)
+                    eor #$55                ; EOR to make sure we detect broken A8
+                    sta $0100,y             ; write $55,$54,$57,$56,$51... to $0102...
+                    inx
+                    iny
+                    bne -
+
+                    ldy #$02
+                    inx                     ; roll over X to its initial value
+                    inx
+-                   txa
+                    cmp $0000,y
+                    bne Thorough512Err
+                    eor #$55
+                    cmp $0100,y
+                    bne Thorough512Err
+                    inx
+                    iny
+                    bne -
+
+                    inx                     ; start next run
+                    bne --
+                    jmp CopyCharSet1        ; back to begin (the whole block of initial RAM test was obviously added later)
+
+Thorough512Err      ldx #$0a
+                    jmp RTBlinkX
 
 ;---------------------------------------------------------------------------------------------------------------------------
 
@@ -413,53 +446,53 @@ BlinkOutRamError    eor TestPatterns,x
                     and #$fe
                     bne Le267
                     ldx #$08
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le267               txa
                     and #$fd
                     bne Le271
                     ldx #$07
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le271               txa
                     and #$fb
                     bne Le27b
                     ldx #$06
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le27b               txa
                     and #$f7
                     bne Le285
                     ldx #$05
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le285               txa
                     and #$ef
                     bne Le28f
                     ldx #$04
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le28f               txa
                     and #$df
                     bne Le299
                     ldx #$03
-                    jmp Le2a5
+                    jmp RTBlinkX
                     
 Le299               txa
                     and #$bf
                     bne Le2a3
                     ldx #$02
-                    jmp Le2a5
-                    
+                    jmp RTBlinkX
 Le2a3               ldx #$01
-Le2a5               txs
+
+RTBlinkX            txs                     ; just using SP as temp here
 Le2a6               lda #$01
                     sta $d020
                     sta $d021
 
                     lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
                     eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-					sta $01
+                    sta $01
 					
                     txa
                     ldx #$7f
@@ -475,7 +508,7 @@ Le2b3               dey
 
                     lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
                     eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-					sta $01
+                    sta $01
 					
                     txa
                     ldx #$7f
@@ -511,7 +544,7 @@ Le2f0               dey
                     bne Le2f0
                     dex
                     bne Le2f0
-                    tsx
+                    tsx                     ; restore X reg to "times to flash"
                     jmp Le2a6
 
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -1196,7 +1229,7 @@ Le7b6               sta $07e4
 
                     *= $f900	
 
-strCaption          !scr "   c-64 dead test rev 781220 kinzi 006  " ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250717" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
