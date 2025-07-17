@@ -75,6 +75,13 @@
 ;
 ;---------------------------------------------------------------------------------------------------------------------------
 
+; these are all zeropage locations that get used in the code
+passCounterLo  = $02
+passCounterHi  = passCounterLo + 1
+tmp1Ptr        = $09
+tmp1PtrHi      = tmp1Ptr + 1
+tmp2Ptr        = $0b
+tmp2PtrHi      = tmp2Ptr + 1
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; start of code
@@ -118,20 +125,20 @@ CopyCharSet1        lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CAS
 
 					lda #<CharSet           ; copy char set to $0800
                     ldx #>CharSet
-                    sta $09
-                    stx $0a
+                    sta tmp1Ptr
+                    stx tmp1PtrHi
                     lda #$00
                     ldx #$08
-                    sta $0b
-                    stx $0c
+                    sta tmp2Ptr
+                    stx tmp2PtrHi
                     ldx #$01                ; copy two pages (512 bytes)
                     ldy #$00
-CopyCharSet1_1      lda ($09),y
-                    sta ($0b),y
+CopyCharSet1_1      lda (tmp1Ptr),y
+                    sta (tmp2Ptr),y
                     iny
                     bne CopyCharSet1_1
-                    inc $0a
-                    inc $0c
+                    inc tmp1PtrHi
+                    inc tmp2PtrHi
                     dex
                     bpl CopyCharSet1_1
 
@@ -143,8 +150,8 @@ CiaRegInit1_1       lda Cia1Init,x          ; CIA init
                     dex
                     bne CiaRegInit1_1
                     ldx #$00
-                    stx $02
-                    stx $03
+                    stx passCounterLo
+                    stx passCounterHi
 
 ClearScreen         ldx #$00                ; clear screen following
 ClearScreen_1       lda #$20
@@ -218,12 +225,12 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
                     dex
                     bpl OutText_Count_1
                     
-                    lda $02                 ; output counter LSB
+                    lda passCounterLo       ; output counter digit 1
                     and #$0f
                     ora #$30
                     sta $07c9
                     
-                    lda $02                 ; output counter digit 2
+                    lda passCounterLo       ; output counter digit 2
                     lsr
                     lsr
                     lsr
@@ -232,12 +239,12 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
                     ora #$30
                     sta $07c8
                     
-                    lda $03                 ; output counter digit 3
+                    lda passCounterHi       ; output counter digit 3
                     and #$0f
                     ora #$30
                     sta $07c7
                     
-                    lda $03                 ; output counter MSB
+                    lda passCounterHi       ; output counter digit 4
                     lsr
                     lsr
                     lsr
@@ -262,34 +269,34 @@ BackFromStackTest   jsr UpdateTod1Display
 
 CopyCharSet2        lda #<CharSet           ; Copy char set to $0800 again after RAM test destroyed the char set
                     ldx #>CharSet
-                    sta $09
-                    stx $0a
+                    sta tmp1Ptr
+                    stx tmp1PtrHi
                     lda #$00
                     ldx #$08
-                    sta $0b
-                    stx $0c
+                    sta tmp2Ptr
+                    stx tmp2PtrHi
                     ldx #$01
                     ldy #$00
-CopyCharSet2_2      lda ($09),y
-                    sta ($0b),y
+CopyCharSet2_2      lda (tmp1Ptr),y
+                    sta (tmp2Ptr),y
                     iny
                     bne CopyCharSet2_2
-                    inc $0a
-                    inc $0c
+                    inc tmp1PtrHi
+                    inc tmp2PtrHi
                     dex
                     bpl CopyCharSet2_2      ; copy two pages (512 bytes) 
                     
                     jsr UpdateTod1Display
                     jsr Test_SoundTest
                     
-                    sed                     ; calculate COUNT
+                    sed                     ; update COUNT
                     lda #$01
                     clc
-                    adc $02
-                    sta $02
+                    adc passCounterLo
+                    sta passCounterLo
                     lda #$00
-                    adc $03
-                    sta $03
+                    adc passCounterHi
+                    sta passCounterHi
                     cld
                     
                     lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
@@ -665,30 +672,30 @@ Le3a8               lda strScreenRam,x
                     bpl Le3a8
                     ldx #$00
                     ldy #$04
-                    stx $09
-                    sty $0a
+                    stx tmp1Ptr
+                    sty tmp1PtrHi
 Le3b9               ldy #$00
-                    lda ($09),y
+                    lda (tmp1Ptr),y
                     pha
                     ldx #$13
 Le3c0               lda TestPatterns,x
-                    sta ($09),y
+                    sta (tmp1Ptr),y
                     txa
                     ldx #$00
 Le3c8               dex
                     bne Le3c8
                     tax
-                    lda ($09),y
+                    lda (tmp1Ptr),y
                     cmp TestPatterns,x
                     bne Le3f0
                     dex
                     bpl Le3c0
                     pla
-                    sta ($09),y
-                    inc $09
+                    sta (tmp1Ptr),y
+                    inc tmp1Ptr
                     bne Le3df
-                    inc $0a
-Le3df               lda $0a
+                    inc tmp1PtrHi
+Le3df               lda tmp1PtrHi
                     cmp #$08
                     bne Le3b9
                     lda #$0f                ; "O"
@@ -725,32 +732,32 @@ Le408               lda strColorRam,x
                     bpl Le408
                     ldx #$00
                     ldy #$d8
-                    stx $09
-                    sty $0a
+                    stx tmp1Ptr
+                    sty tmp1PtrHi
                     ldy #$00
 Le41b               ldy #$00
-                    lda ($09),y
+                    lda (tmp1Ptr),y
                     pha
                     ldx #$0b
 Le422               lda ColorRamTP,x
-                    sta ($09),y
+                    sta (tmp1Ptr),y
                     txa
                     ldx #$00
 Le42a               dex
                     bne Le42a
                     tax
-                    lda ($09),y
+                    lda (tmp1Ptr),y
                     and #$0f
                     cmp ColorRamTP,x
                     bne Le454
                     dex
                     bpl Le422
                     pla
-                    sta ($09),y
-                    inc $09
+                    sta (tmp1Ptr),y
+                    inc tmp1Ptr
                     bne Le443
-                    inc $0a
-Le443               lda $0a
+                    inc tmp1PtrHi
+Le443               lda tmp1PtrHi
                     cmp #$dc
                     bne Le41b
                     lda #$0f                ; "O"
@@ -787,26 +794,26 @@ Test_RamTest_1      lda strRamTest,x
                     bpl Test_RamTest_1
                     ldx #$00
                     ldy #$08
-                    stx $09
-                    sty $0a
+                    stx tmp1Ptr
+                    sty tmp1PtrHi
 Test_RamTest_2      ldy #$00
                     ldx #$13
 Test_RamTest_3      lda TestPatterns,x
-                    sta ($09),y
+                    sta (tmp1Ptr),y
                     txa
                     ldx #$7f
 Test_RamTest_4      dex
                     bne Test_RamTest_4
                     tax
-                    lda ($09),y
+                    lda (tmp1Ptr),y
                     cmp TestPatterns,x
                     bne Test_RamTest_Error
                     dex
                     bpl Test_RamTest_3
-                    inc $09
+                    inc tmp1Ptr
                     bne Test_RamTest_5
-                    inc $0a
-Test_RamTest_5      lda $0a
+                    inc tmp1PtrHi
+Test_RamTest_5      lda tmp1PtrHi
                     cmp #$10
                     bne Test_RamTest_2
                     lda #$0f                ; "O"
