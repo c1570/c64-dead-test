@@ -680,7 +680,7 @@ Le42a               dex
                     lda (tmp1Ptr),y
                     and #$0f
                     cmp ColorRamTP,x
-                    bne Le454
+                    bne Test_ColorRam_Err
                     dex
                     bpl Le422
                     pla
@@ -700,7 +700,7 @@ Le443               lda tmp1PtrHi
                     sta ColMemStart+ColMsgOff+14
                     rts
                     
-Le454               eor ColorRamTP,x
+Test_ColorRam_Err   eor ColorRamTP,x
                     tax
                     lda #$02                ; "B"
                     sta ScreenMemStart+ColMsgOff+13
@@ -739,9 +739,8 @@ Test_RamTest_2      ldx #$13
 Test_RamTest_3      lda TestPatterns,x
                     sta (tmp1Ptr),y
                     lda (tmp1Ptr),y
-                    cmp TestPatterns,x
-                    beq +
                     eor TestPatterns,x
+                    beq +
                     jmp Test_RamTest_Error
 +                   dex
                     bpl Test_RamTest_3
@@ -767,7 +766,7 @@ Test_RamTest_3      lda TestPatterns,x
 -                   +PRNG_Generate
                     cmp (tmp1Ptr),y
                     beq +
-                    eor (tmp1Ptr),y
+                    lda #$00
                     jmp Test_RamTest_Error
 +                   iny
                     bne -
@@ -798,10 +797,9 @@ Test_RamTest_3      lda TestPatterns,x
                     sta ColMemStart+ZPMsgOff+14
                     sta ColMemStart+ColMsgOff+14
                     jmp BackFromRAMTest
-                    
-Test_RamTest_Error  ; expects bit errors in A
-                    tax
 
+Test_RamTest_Error  ; expects bit errors in A or zero on PRNG check error
+                    tax
                     txs                     ; just use S as temp register, stack is unreliable anyways
                     lda VicInit+$18
                     sta $d018               ; switch VIC-II to RAM again
@@ -809,8 +807,32 @@ Test_RamTest_Error  ; expects bit errors in A
                     ldy #$ff
                     jmp SetupTextScreen     ; this will not use RTS because of Y>0
 Test_RamTest_Return tsx
+                    bne Test_RamTest_Biterr
+                    lda #$01                ; "A"
+                    sta ScreenMemStart+RamMsgOff+13
+                    lda #$04                ; "D"
+                    sta ScreenMemStart+RamMsgOff+14
+                    lda #$12                ; "R"
+                    sta ScreenMemStart+RamMsgOff+15
+                    lda #$06                ; "F"
+                    sta ScreenMemStart+RamMsgOff+16
+                    lda #$01                ; "A"
+                    sta ScreenMemStart+RamMsgOff+17
+                    lda #$09                ; "I"
+                    sta ScreenMemStart+RamMsgOff+18
+                    lda #$0c                ; "L"
+                    sta ScreenMemStart+RamMsgOff+19
+                    lda ColorTextBad
+                    sta ColMemStart+RamMsgOff+13
+                    sta ColMemStart+RamMsgOff+14
+                    sta ColMemStart+RamMsgOff+15
+                    sta ColMemStart+RamMsgOff+16
+                    sta ColMemStart+RamMsgOff+17
+                    sta ColMemStart+RamMsgOff+18
+                    sta ColMemStart+RamMsgOff+19
+                    jmp LoopUntilDoomsday
 
-                    lda #$02                ; "B"
+Test_RamTest_Biterr lda #$02                ; "B"
                     sta ScreenMemStart+RamMsgOff+13
                     lda #$01                ; "A"
                     sta ScreenMemStart+RamMsgOff+14
@@ -925,7 +947,8 @@ RamTest_Error_Bit_7 txa
                     sta $da88
                     sta $da89
                     sta $da8a
-LoopUntilDoomsday   inc $d020 
+
+LoopUntilDoomsday   inc $d020
                     jmp LoopUntilDoomsday   ; NO CARRIER
 
 ;---------------------------------------------------------------------------------------------------------------------------
