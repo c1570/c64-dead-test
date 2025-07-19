@@ -75,9 +75,7 @@ passCounterLo  = $02
 passCounterHi  = passCounterLo + 1
 tmp1Ptr        = passCounterHi + 1
 tmp1PtrHi      = tmp1Ptr + 1
-tmp2Ptr        = tmp1PtrHi + 1
-tmp2PtrHi      = tmp2Ptr + 1
-prngX          = tmp2PtrHi + 1
+prngX          = tmp1PtrHi + 1
 prngY          = prngX + 1
 prngZ          = prngY + 1
 prngA          = prngZ + 1
@@ -149,25 +147,14 @@ SoundMsgOff = 200
                     sta $01
 }
 
-!macro CopyCharSet_AXY { ; copy charset from ROM to RAM, clobbers A,X,Y
-                    lda #<CharSet           ; copy char set to $0800
-                    ldx #>CharSet
-                    sta tmp1Ptr
-                    stx tmp1PtrHi
-                    lda #$00
-                    ldx #$08
-                    sta tmp2Ptr
-                    stx tmp2PtrHi
-                    ldx #$01                ; copy two pages (512 bytes)
+!macro CopyCharSet_AY { ; copy charset from ROM to RAM $0800, clobbers A,Y
                     ldy #$00
--                   lda (tmp1Ptr),y
-                    sta (tmp2Ptr),y
+-                   lda CharSet,y
+                    sta $0800,y
+                    lda CharSet+$0100,y
+                    sta $0900,y
                     iny
                     bne -
-                    inc tmp1PtrHi
-                    inc tmp2PtrHi
-                    dex
-                    bpl -
 }
 
 !macro CopyStr_AX .sourcePtr, .destPtr, .len {
@@ -205,7 +192,7 @@ Reset_Handler       sei
 ;---------------------------------------------------------------------------------------------------------------------------
 
 MainTestStart       +Flip_Cass_Port_A
-                    +CopyCharSet_AXY
+                    +CopyCharSet_AY
 
 CiaRegInit1         ldx #$04
 CiaRegInit1_1       lda Cia1Init,x          ; CIA init
@@ -778,7 +765,7 @@ Test_RamTest_3      lda TestPatterns,x
                     ; all ok, fix memory clobbering
                     lda VicInit+$18
                     sta $d018               ; switch VIC-II to RAM again
-                    +CopyCharSet_AXY
+                    +CopyCharSet_AY
                     jsr SetupTextScreen
 
                     lda #$0f                ; "O"
@@ -803,7 +790,7 @@ Test_RamTest_Error  ; expects bit errors in A or zero on PRNG check error
                     txs                     ; just use S as temp register, stack is unreliable anyways
                     lda VicInit+$18
                     sta $d018               ; switch VIC-II to RAM again
-                    +CopyCharSet_AXY        ; do minimal screen fixes after clobbering
+                    +CopyCharSet_AY         ; do minimal screen fixes after clobbering
                     ldy #$ff
                     jmp SetupTextScreen     ; this will not use RTS because of Y>0
 Test_RamTest_Return tsx
