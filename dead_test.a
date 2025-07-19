@@ -73,15 +73,110 @@
 ; these are all zeropage locations that get used in the code
 passCounterLo  = $02
 passCounterHi  = passCounterLo + 1
-tmp1Ptr        = $09
+tmp1Ptr        = passCounterHi + 1
 tmp1PtrHi      = tmp1Ptr + 1
-tmp2Ptr        = $0b
+tmp2Ptr        = tmp1PtrHi + 1
 tmp2PtrHi      = tmp2Ptr + 1
-prngX          = $0d
+prngX          = tmp2PtrHi + 1
 prngY          = prngX + 1
 prngZ          = prngY + 1
 prngA          = prngZ + 1
 prngT          = prngA + 1
+
+firstUnusedZP  = prngT + 1
+
+ScreenMemStart = $0400
+ColMemStart = $d800
+
+ZPMsgOff = 80
+ColMsgOff = 120
+RamMsgOff = 160
+SoundMsgOff = 200
+
+;---------------------------------------------------------------------------------------------------------------------------
+; PRNG routine
+;---------------------------------------------------------------------------------------------------------------------------
+
+; the following is a port of rng-4261412736 by Edward Rosten, https://github.com/edrosten/8bit_rng
+; based on the xorshift algorithm
+
+; implemented as macros to not clobber the stack
+
+!macro PRNG_Init {             ; init PRNG using A
+                    sta prngA
+                    lda #$00
+                    sta prngX
+                    sta prngY
+                    sta prngZ
+}
+
+!macro PRNG_Generate {         ; returns one new PRNG byte in A, doesn't clobber any other register
+                    lda prngX
+                    rol
+                    rol
+                    rol
+                    rol
+                    and #$f0
+                    eor prngX
+                    sta prngT  ; t = x ^ (x << 4)
+                    lda prngY
+                    sta prngX  ; x = y
+                    lda prngZ
+                    sta prngY  ; y = t
+                    lda prngA
+                    sta prngZ  ; z = a
+                    eor prngT
+                    sta prngA  ; a = z ^ t ...
+                    lda prngZ
+                    clc
+                    ror
+                    eor prngA
+                    sta prngA  ; ... ^ (z >> 1)
+                    lda prngT
+                    clc
+                    rol
+                    eor prngA
+                    sta prngA  ; ... ^ (t << 1)
+}
+
+;---------------------------------------------------------------------------------------------------------------------------
+; other macros
+;---------------------------------------------------------------------------------------------------------------------------
+
+!macro Flip_Cass_Port_A { ; flip cassette port lines, clobbers A
+                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
+                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
+                    sta $01
+}
+
+!macro CopyCharSet_AXY { ; copy charset from ROM to RAM, clobbers A,X,Y
+                    lda #<CharSet           ; copy char set to $0800
+                    ldx #>CharSet
+                    sta tmp1Ptr
+                    stx tmp1PtrHi
+                    lda #$00
+                    ldx #$08
+                    sta tmp2Ptr
+                    stx tmp2PtrHi
+                    ldx #$01                ; copy two pages (512 bytes)
+                    ldy #$00
+-                   lda (tmp1Ptr),y
+                    sta (tmp2Ptr),y
+                    iny
+                    bne -
+                    inc tmp1PtrHi
+                    inc tmp2PtrHi
+                    dex
+                    bpl -
+}
+
+!macro CopyStr_AX .sourcePtr, .destPtr, .len {
+                    ldx #.len
+-                   lda .sourcePtr,x
+                    sta .destPtr,x
+                    dex
+                    bpl -
+}
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; start of code
@@ -106,31 +201,11 @@ Reset_Handler       sei
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Main Test
 ; Stack and ZP have tested okay in initial RAM test, so we're free to use those from here on.
-; Still, keep testing - problems may occur once the machine has warmed up
+; Still, keep testing and be defensive - problems may occur once the machine has warmed up
 ;---------------------------------------------------------------------------------------------------------------------------
 
-CopyCharSet1        lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    sta $01
-
-                    lda #<CharSet           ; copy char set to $0800
-                    ldx #>CharSet
-                    sta tmp1Ptr
-                    stx tmp1PtrHi
-                    lda #$00
-                    ldx #$08
-                    sta tmp2Ptr
-                    stx tmp2PtrHi
-                    ldx #$01                ; copy two pages (512 bytes)
-                    ldy #$00
-CopyCharSet1_1      lda (tmp1Ptr),y
-                    sta (tmp2Ptr),y
-                    iny
-                    bne CopyCharSet1_1
-                    inc tmp1PtrHi
-                    inc tmp2PtrHi
-                    dex
-                    bpl CopyCharSet1_1
+MainTestStart       +Flip_Cass_Port_A
+                    +CopyCharSet_AXY
 
 CiaRegInit1         ldx #$04
 CiaRegInit1_1       lda Cia1Init,x          ; CIA init
@@ -139,11 +214,57 @@ CiaRegInit1_1       lda Cia1Init,x          ; CIA init
                     sta $dd07,x
                     dex
                     bne CiaRegInit1_1
+
+CiaRegInit2         lda #$08                ; CIA init part 2
+                    sta $dc0f
+                    sta $dd0f
+                    lda #$48
+                    sta $dc0e
+                    lda #$08
+                    sta $dd0e
+
                     ldx #$00
                     stx passCounterLo
                     stx passCounterHi
 
-ClearScreen         ldx #$00                ; clear screen following
+MainTestLoop        ldx #$2f                ; VIC register init
+-                   lda VicInit,x
+                    sta $d000,x
+                    dex
+                    bpl -
+
+                    ldy #$00                ; flag for SetupTextScreen to use RTS
+                    jsr SetupTextScreen
+                    jsr UpdateTod1Display
+                    jsr Test_ZeroPage
+                    +Flip_Cass_Port_A
+                    jsr UpdateTod1Display
+                    jsr Test_ColorRam
+                    jsr UpdateTod1Display
+                    jmp Test_RamTest        ; Clobbers everything but the very first ZP bytes so don't use JSR
+BackFromRAMTest     jsr UpdateTod1Display
+                    jsr Test_SoundTest
+
+                    sed                     ; update COUNT
+                    lda #$01
+                    clc
+                    adc passCounterLo
+                    sta passCounterLo
+                    lda #$00
+                    adc passCounterHi
+                    sta passCounterHi
+                    cld
+
+                    +Flip_Cass_Port_A
+                    jmp MainTestLoop
+
+
+;---------------------------------------------------------------------------------------------------------------------------
+; (Initial) Screen Setup
+; NOTE! If this is called with Y>0, it's not using RTS to exit but JMP Test_RamTest_Return
+;---------------------------------------------------------------------------------------------------------------------------
+
+SetupTextScreen     ldx #$00                ; clear screen following
 ClearScreen_1       lda #$20
                     sta $0400,x
                     sta $0500,x
@@ -156,62 +277,53 @@ ClearScreen_1       lda #$20
                     sta $db00,x
                     inx
                     bne ClearScreen_1
-                    
+
 OutText_Header      ldx #$27                ; 40 chars (header)
-OutText_Header_1    lda StatusHeader,x      ; fetch text
+-                   lda StatusHeader,x      ; fetch text
                     sta $0630,x             ; store to screen RAM
-                    lda ColorTextBad                ; RED color
+                    lda ColorTextBad        ; RED color
                     sta $da30,x             ; fill color RAM
                     dex
-                    bpl OutText_Header_1
+                    bpl -
+
+                    +CopyStr_AX strZeroPage, ScreenMemStart+ZPMsgOff, 8
+                    +CopyStr_AX strColorRam, ScreenMemStart+ColMsgOff, 8
+                    +CopyStr_AX strRamTest, ScreenMemStart+RamMsgOff, 12
+                    +CopyStr_AX strSoundTest, ScreenMemStart+SoundMsgOff, 9
                     
 OutText_Status      ldx #$00                ; output a string terminated by "FF"
-OutText_Status_1    lda StatusText,x        ; fetch text
+-                   lda StatusText,x        ; fetch text
                     cmp #$ff                ; eot flag detected?
-                    beq OutColor_Status     ; yes, exit
+                    beq OutColor_Status     ; yes, continue
                     sta $0658,x             ; no, store to screen RAM
                     inx
-                    jmp OutText_Status_1    ; loop on
+                    jmp -                   ; loop on
                     
 OutColor_Status     ldx #$00                ; write correct colors to color RAM, values are terminated by "FF"
-OutColor_Status_1   lda StatusColor,x       ; fetch color
+-                   lda StatusColor,x       ; fetch color
                     cmp #$ff                ; eot flag detected?
-                    beq OutText_Footer      ; yes, exit
+                    beq OutText_Footer      ; yes, continue
                     sta $da58,x             ; no, store to color RAM
                     inx
-                    jmp OutColor_Status_1   ; loop on
+                    jmp -                   ; loop on
                     
 OutText_Footer      ldx #$27                ; 40 chars (footer)
 OutText_Footer_1    lda StatusFooter,x
                     sta $0748,x
-                    lda ColorTextBad                ; RED color
+                    lda ColorTextBad        ; RED color
                     sta $db48,x             ; fill color RAM
                     dex
                     bpl OutText_Footer_1
 
-CiaRegInit2         lda #$08                ; CIA init part 2
-                    sta $dc0f
-                    sta $dd0f
-                    lda #$48
-                    sta $dc0e
-                    lda #$08
-                    sta $dd0e
-
-VicRegInit          ldx #$2f                ; VIC register init
-VicRegInit_1        lda VicInit,x
-                    sta $d000,x
-                    dex
-                    bpl VicRegInit_1
-                    
 OutText_Caption     ldx #$27
 OutText_Caption_1   lda strCaption,x        ; write program title to screen
-                    sta $0400,x
+                    sta ScreenMemStart,x
                     dex
                     bpl OutText_Caption_1
                     
 OutText_Count       ldx #$04
 OutText_Count_1     lda strCount,x          ; write "COUNT"
-                    sta $07c0,x
+                    sta ScreenMemStart+$03c0,x
                     dex
                     bpl OutText_Count_1
                     
@@ -243,71 +355,10 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
                     ora #$30
                     sta $07c6
 
-                    jmp Test_ZeroPage       ; use JMP because stack is not reliable yet
-					
-BackFromZPTest      lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-					sta $01
-					jmp Test_StackPage      ; still use JMP because stack is still not reliable yet
-                    
-BackFromStackTest   jsr UpdateTod1Display
-                    jsr Test_ScreenRam
-                    jsr UpdateTod1Display
-                    jsr Test_ColorRam
-                    jsr UpdateTod1Display
-                    jsr Test_RamTest
-
-CopyCharSet2        lda #<CharSet           ; Copy char set to $0800 again after RAM test destroyed the char set
-                    ldx #>CharSet
-                    sta tmp1Ptr
-                    stx tmp1PtrHi
-                    lda #$00
-                    ldx #$08
-                    sta tmp2Ptr
-                    stx tmp2PtrHi
-                    ldx #$01
-                    ldy #$00
-CopyCharSet2_2      lda (tmp1Ptr),y
-                    sta (tmp2Ptr),y
-                    iny
-                    bne CopyCharSet2_2
-                    inc tmp1PtrHi
-                    inc tmp2PtrHi
-                    dex
-                    bpl CopyCharSet2_2      ; copy two pages (512 bytes) 
-                    
-                    jsr UpdateTod1Display
-                    jsr Test_SoundTest
-                    
-                    sed                     ; update COUNT
-                    lda #$01
-                    clc
-                    adc passCounterLo
-                    sta passCounterLo
-                    lda #$00
-                    adc passCounterHi
-                    sta passCounterHi
-                    cld
-                    
-                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    sta $01
-
-                    lda #$00                ; shut down SID
-                    sta $d418
-                    
-ClearUpperScreen    ldx #$00                ; clear screen, keep RAM status aera intact
-                    lda #$20
-ClearUpperScreen_1  sta $0400,x             ; first 256 chars
-                    sta $0500,x             ; second 256 chars
-                    inx
-                    bne ClearUpperScreen_1
-                    ldx #$2e                ; additional 47 chars
-                    lda #$20
-ClearUpperScreen_2  sta $0600,x
-                    dex
-                    bpl ClearUpperScreen_2
-                    jmp VicRegInit          ; start over at VIC init
+                    cpy #$00
+                    beq +
+                    jmp Test_RamTest_Return
++                   rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Initial RAM Test 
@@ -335,20 +386,17 @@ NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
                     bne NextTestPattern     ; loop on
 
                     dec $d020               ; activity control
-                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    sta $01
+                    +Flip_Cass_Port_A
 					
-                    txa                     ; save X in A
-
+                    txa
                     ldx #$00
                     ldy #$00            
 InitRamTest_Delay   dey                     ; delay 256 * 5 cycles = 1.25 ms
                     bne InitRamTest_Delay
                     dex                     ; delay 256 times = about 80 ms
                     bne InitRamTest_Delay
+                    tax
 
-                    tax                     ; restore X from A
 ReCheckTestPattern  lda $0100,y             ; now re-read RAM pages and compare with stored values
                     cmp TestPatterns,x
                     bne ErrorHandler        ; on error branch to error handler
@@ -431,7 +479,7 @@ Thorough512Test     ldx #$00                ; do a slightly more thorough check 
 
                     inx                     ; start next run
                     bne --
-                    jmp CopyCharSet1        ; back to begin (the whole block of initial RAM test was obviously added later)
+                    jmp MainTestStart       ; back to begin (the whole block of initial RAM test was obviously added later)
 
 Thorough512Err      ldx #$0a
                     jmp RTBlinkX
@@ -487,9 +535,7 @@ Le2a6               lda #$01
                     sta $d020
                     sta $d021
 
-                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    sta $01
+                    +Flip_Cass_Port_A
 					
                     txa
                     ldx #$7f
@@ -503,9 +549,8 @@ Le2b3               dey
                     sta $d020
                     sta $d021
 
-                    lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-                    sta $01
+
+                    +Flip_Cass_Port_A
 					
                     txa
                     ldx #$7f
@@ -546,180 +591,76 @@ Le2f0               dey
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Zero Page Test
+; This clobbers firstUnusedZP..$00ff
 ;---------------------------------------------------------------------------------------------------------------------------
-                    
-Test_ZeroPage       ldx #$08
-Le2fc               lda strZeroPage,x
-                    sta $0450,x
-                    dex
-                    bpl Le2fc
+
+Test_ZeroPage       lda #31                 ; arrow left
+                    sta ScreenMemStart+ZPMsgOff+13
                     ldx #$13
 Le307               lda TestPatterns,x
-                    ldy #$12
-Le30c               sta $0000,y
+                    ldy #firstUnusedZP
+-                   sta $0000,y
                     iny
-                    bne Le30c
+                    bne -
                     txa
                     ldx #$00
                     ldy #$00
-Le317               dey
-                    bne Le317
+-                   dey                     ; delay
+                    bne -
                     dex
-                    bne Le317
+                    bne -
                     tax
-                    lda TestPatterns,x
-                    ldy #$12
-Le323               cmp $0000,y
-                    bne Le33b
+                    ldy #firstUnusedZP
+-                   lda TestPatterns,x
+                    eor $0000,y
+                    bne ZP_Error
                     iny
-                    bne Le323
+                    bne -
                     dex
                     bpl Le307
-                    lda #$0f                ; "O"
-                    sta $045d
-                    lda #$0b                ; "K"
-                    sta $045e
-                    lda ColorTextOk
-                    sta $d85d
-                    sta $d85e
-                    jmp BackFromZPTest      ; back to where we came from
-                    
-Le33b               eor TestPatterns,x
-                    tax
-                    lda #$02                ; "B"
-                    sta $045d
-                    lda #$01                ; "A"
-                    sta $045e
-                    lda #$04                ; "D"
-                    sta $045f
-                    lda ColorTextBad
-                    sta $d85d
-                    sta $d85e
-                    sta $d85f
-                    jmp RamTest_Error_Bit_0
-                    
-;---------------------------------------------------------------------------------------------------------------------------
-; Stack Page Test
-;---------------------------------------------------------------------------------------------------------------------------
 
-Test_StackPage      ldx #$09
-Le353               lda strStackPage,x
-                    sta $0478,x
-                    dex
-                    bpl Le353
-                    ldx #$13
-Le35e               lda TestPatterns,x
-                    ldy #$00
-Le363               sta $0100,y
-                    iny
-                    bne Le363
+                    ldy #$02                ; invert first page twice then check
+-                   lda $0000,y
+                    tax
+                    eor #$ff
+                    sta $0000,y
+                    lda $0000,y
+                    eor #$ff
+                    sta $0000,y
                     txa
-                    ldx #$00
-                    ldy #$00
-Le36e               dey
-                    bne Le36e
-                    dex
-                    bne Le36e
-                    tax
-                    lda TestPatterns,x
-Le378               cmp $0100,y
-                    bne Le390
+                    eor $0000,y
+                    bne ZP_Error
                     iny
-                    bne Le378
-                    dex
-                    bpl Le35e
-                    lda #$0f                ; "O"
-                    sta $0485
-                    lda #$0b                ; "K"
-                    sta $0486
-                    lda ColorTextOk
-                    sta $d885
-                    sta $d886
-                    jmp BackFromStackTest   ; back to where we came from
-                    
-Le390               eor TestPatterns,x
-                    tax
-                    lda #$02                ; "B"
-                    sta $0485
-                    lda #$01                ; "A"
-                    sta $0486
-                    lda #$04                ; "D"
-                    sta $0487
-                    lda ColorTextBad
-                    sta $d885
-                    sta $d886
-                    sta $d887
-                    jmp RamTest_Error_Bit_0
-                    
-;---------------------------------------------------------------------------------------------------------------------------
-; Screen RAM Test
-;---------------------------------------------------------------------------------------------------------------------------
+                    bne -
 
-Test_ScreenRam      ldx #$09
-Le3a8               lda strScreenRam,x
-                    sta $04a0,x
-                    dex
-                    bpl Le3a8
-                    ldx #$00
-                    ldy #$04
-                    stx tmp1Ptr
-                    sty tmp1PtrHi
-Le3b9               ldy #$00
-                    lda (tmp1Ptr),y
-                    pha
-                    ldx #$13
-Le3c0               lda TestPatterns,x
-                    sta (tmp1Ptr),y
-                    txa
-                    ldx #$00
-Le3c8               dex
-                    bne Le3c8
-                    tax
-                    lda (tmp1Ptr),y
-                    cmp TestPatterns,x
-                    bne Le3f0
-                    dex
-                    bpl Le3c0
-                    pla
-                    sta (tmp1Ptr),y
-                    inc tmp1Ptr
-                    bne Le3df
-                    inc tmp1PtrHi
-Le3df               lda tmp1PtrHi
-                    cmp #$08
-                    bne Le3b9
                     lda #$0f                ; "O"
-                    sta $04ad
+                    sta ScreenMemStart+ZPMsgOff+13
                     lda #$0b                ; "K"
-                    sta $04ae
+                    sta ScreenMemStart+ZPMsgOff+14
                     lda ColorTextOk
-                    sta $d8ad
-                    sta $d8ae
+                    sta ColMemStart+ZPMsgOff+13
+                    sta ColMemStart+ZPMsgOff+14
                     rts
-                    
-Le3f0               eor TestPatterns,x
-                    tax
-                    lda #$02                ; "B"
-                    sta $04ad
-                    lda #$01                ; "A"
-                    sta $04ae
-                    lda #$04                ; "D"
-                    sta $04af
-                    lda ColorTextBad
-                    sta $d8ad
-                    sta $d8ae
-                    sta $d8af
-                    jsr RamTest_Error_Bit_0
 
+ZP_Error            tax
+                    lda #$02                ; "B"
+                    sta ScreenMemStart+ZPMsgOff+13
+                    lda #$01                ; "A"
+                    sta ScreenMemStart+ZPMsgOff+14
+                    lda #$04                ; "D"
+                    sta ScreenMemStart+ZPMsgOff+15
+                    lda ColorTextBad
+                    sta ColMemStart+ZPMsgOff+13
+                    sta ColMemStart+ZPMsgOff+14
+                    sta ColMemStart+ZPMsgOff+15
+                    jmp RamTest_Error_Bit_0
+                    
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Color Ram Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
-Test_ColorRam       ldx #$08
-Le408               lda strColorRam,x
-                    sta $04c8,x
-                    dex
-                    bpl Le408
+Test_ColorRam       lda #31                 ; arrow left
+                    sta ScreenMemStart+ColMsgOff+13
                     ldx #$00
                     ldy #$d8
                     stx tmp1Ptr
@@ -751,59 +692,52 @@ Le443               lda tmp1PtrHi
                     cmp #$dc
                     bne Le41b
                     lda #$0f                ; "O"
-                    sta $04d5
+                    sta ScreenMemStart+ColMsgOff+13
                     lda #$0b                ; "K"
-                    sta $04d6
+                    sta ScreenMemStart+ColMsgOff+14
                     lda ColorTextOk
-                    sta $d8d5
-                    sta $d8d6
+                    sta ColMemStart+ColMsgOff+13
+                    sta ColMemStart+ColMsgOff+14
                     rts
                     
 Le454               eor ColorRamTP,x
                     tax
                     lda #$02                ; "B"
-                    sta $04d5
+                    sta ScreenMemStart+ColMsgOff+13
                     lda #$01                ; "A"
-                    sta $04d6
+                    sta ScreenMemStart+ColMsgOff+14
                     lda #$04                ; "D"
-                    sta $04d7
+                    sta ScreenMemStart+ColMsgOff+15
                     lda ColorTextBad
-                    sta $d8d5
-                    sta $d8d6
-                    sta $d8d7
+                    sta ColMemStart+ColMsgOff+13
+                    sta ColMemStart+ColMsgOff+14
+                    sta ColMemStart+ColMsgOff+15
                     jmp RamTest_Error_Bit_0
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; RAM Test First 4 kByte
 ;---------------------------------------------------------------------------------------------------------------------------
-                    
+
+RamTestMsgScrStart  = 40
+RamTestLongMsgLen   = 66
+RamTestBegin        = RamTestMsgScrStart + RamTestLongMsgLen + 1
+
 Test_RamTest        lda #($3800/$0800*2)    ; VIC-II sees ROM $F000 at $3000:
                     sta $d018               ; show charset from ROM
-                    ldx #66
-Test_RamTest_1      lda strRamTest,x
-                    cpx #$0c
-                    bcs +
-                    sta $04f0,x
-+                   sta 40,x
-                    dex
-                    bpl Test_RamTest_1
+                    +CopyStr_AX strRamTest, RamTestMsgScrStart, RamTestLongMsgLen
+
                     ldx #$00
-                    ldy #$08
+                    ldy #>RamTestBegin
                     stx tmp1Ptr
                     sty tmp1PtrHi
                     ldx passCounterLo
                     inx                     ; avoid seeding PRNG with 0
                     txa
-                    jsr PRNG_Init
-                    ldy #$00
+                    +PRNG_Init
+                    ldy #<RamTestBegin
 Test_RamTest_2      ldx #$13
 Test_RamTest_3      lda TestPatterns,x
                     sta (tmp1Ptr),y
-                    txa
-                    ldx #$7f                ; delay
--                   dex
-                    bne -
-                    tax
                     lda (tmp1Ptr),y
                     cmp TestPatterns,x
                     beq +
@@ -811,9 +745,9 @@ Test_RamTest_3      lda TestPatterns,x
                     jmp Test_RamTest_Error
 +                   dex
                     bpl Test_RamTest_3
-                    jsr PRNG_Generate
+                    +PRNG_Generate
                     sta (tmp1Ptr),y         ; store PRNG byte
-                    inc tmp1Ptr             ; next address
+                    iny                     ; next address
                     bne Test_RamTest_2
                     inc tmp1PtrHi
                     lda tmp1PtrHi
@@ -824,12 +758,13 @@ Test_RamTest_3      lda TestPatterns,x
                     ldx passCounterLo
                     inx
                     txa
-                    jsr PRNG_Init
-                    ldy #$08
+                    +PRNG_Init
+                    ldy #>RamTestBegin
                     sty tmp1PtrHi
                     ldy #$00
                     sty tmp1Ptr
--                   jsr PRNG_Generate
+                    ldy #<RamTestBegin
+-                   +PRNG_Generate
                     cmp (tmp1Ptr),y
                     beq +
                     eor (tmp1Ptr),y
@@ -841,30 +776,50 @@ Test_RamTest_3      lda TestPatterns,x
                     cmp #$10
                     bne -
 
-                    ; all ok
-                    lda #$0f                ; "O"
-                    sta $04fd
-                    lda #$0b                ; "K"
-                    sta $04fe
-                    lda ColorTextOk
-                    sta $d8fd
-                    sta $d8fe
+                    ; all ok, fix memory clobbering
                     lda VicInit+$18
                     sta $d018               ; switch VIC-II to RAM again
-                    rts
+                    +CopyCharSet_AXY
+                    jsr SetupTextScreen
+
+                    lda #$0f                ; "O"
+                    sta ScreenMemStart+RamMsgOff+13
+                    sta ScreenMemStart+ZPMsgOff+13   ; oh well, just restore the ZP/Col "OK"s, too
+                    sta ScreenMemStart+ColMsgOff+13
+                    lda #$0b                ; "K"
+                    sta ScreenMemStart+RamMsgOff+14
+                    sta ScreenMemStart+ZPMsgOff+14
+                    sta ScreenMemStart+ColMsgOff+14
+                    lda ColorTextOk
+                    sta ColMemStart+RamMsgOff+13
+                    sta ColMemStart+ZPMsgOff+13
+                    sta ColMemStart+ColMsgOff+13
+                    sta ColMemStart+RamMsgOff+14
+                    sta ColMemStart+ZPMsgOff+14
+                    sta ColMemStart+ColMsgOff+14
+                    jmp BackFromRAMTest
                     
 Test_RamTest_Error  ; expects bit errors in A
                     tax
+
+                    txs                     ; just use S as temp register, stack is unreliable anyways
+                    lda VicInit+$18
+                    sta $d018               ; switch VIC-II to RAM again
+                    +CopyCharSet_AXY        ; do minimal screen fixes after clobbering
+                    ldy #$ff
+                    jmp SetupTextScreen     ; this will not use RTS because of Y>0
+Test_RamTest_Return tsx
+
                     lda #$02                ; "B"
-                    sta $04fd               
+                    sta ScreenMemStart+RamMsgOff+13
                     lda #$01                ; "A"
-                    sta $04fe
+                    sta ScreenMemStart+RamMsgOff+14
                     lda #$04                ; "D"
-                    sta $04ff
+                    sta ScreenMemStart+RamMsgOff+15
                     lda ColorTextBad
-                    sta $d8fd
-                    sta $d8fe
-                    sta $d8ff
+                    sta ColMemStart+RamMsgOff+13
+                    sta ColMemStart+RamMsgOff+14
+                    sta ColMemStart+RamMsgOff+15
                     
 RamTest_Error_Bit_0 txa
                     and #$01
@@ -977,11 +932,8 @@ LoopUntilDoomsday   inc $d020
 ; Sound Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
-Test_SoundTest      ldx #$09
-OutText_SoundTest   lda strSoundTest,x
-                    sta $0518,x
-                    dex
-                    bpl OutText_SoundTest
+Test_SoundTest      lda #31                 ; arrow left
+                    sta ScreenMemStart+SoundMsgOff+13
                     lda #$14
                     sta $d418
                     lda #$00
@@ -1091,7 +1043,9 @@ PlayVoice3          lda SidFreqV3Hi,x       ; on voice #3
                     bmi SoundTestComplete
                     jmp TestNextWaveForm    ; start over with next waveform
                     
-SoundTestComplete   rts
+SoundTestComplete   lda #$00                ; shut down SID
+                    sta $d418
+                    rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Delay Loop for Sounds
@@ -1114,23 +1068,10 @@ SoundDelayLoop_2    dey
 SoundDelayLoopCpl   rts
                     
 ;---------------------------------------------------------------------------------------------------------------------------
-; This seems never to be executed ...
-;---------------------------------------------------------------------------------------------------------------------------
-
-                    lda #$37
-                    sta $01
-                    lda #$48
-                    sta $DC0E
-                    lda #$08
-                    sta $DD0E
-                    
-;---------------------------------------------------------------------------------------------------------------------------
 ; Update TOD1 display
 ;---------------------------------------------------------------------------------------------------------------------------
 
-UpdateTod1Display   lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CASS SENSE = "S",   CASS WRITE = "W"
-                    eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
-					sta $01
+UpdateTod1Display   +Flip_Cass_Port_A
 					
                     lda $dc0b               ; test for PM flag
                     clc
@@ -1251,53 +1192,6 @@ Le7b6               sta $07e4
                     rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
-; PRNG routine
-;---------------------------------------------------------------------------------------------------------------------------
-
-; the following is a port of rng-4261412736 by Edward Rosten, https://github.com/edrosten/8bit_rng
-; based on the xorshift algorithm
-
-PRNG_Init           ; init PRNG using A as seed
-                    sta prngA
-                    lda #$00
-                    sta prngX
-                    sta prngY
-                    sta prngZ
-                    jsr PRNG_Generate  ; warm up a bit
-                    jsr PRNG_Generate
-                    jsr PRNG_Generate
-                    rts
-
-PRNG_Generate       ; returns one new PRNG byte in A, doesn't clobber any other register
-                    lda prngX
-                    rol
-                    rol
-                    rol
-                    rol
-                    and #$f0
-                    eor prngX
-                    sta prngT  ; t = x ^ (x << 4)
-                    lda prngY
-                    sta prngX  ; x = y
-                    lda prngZ
-                    sta prngY  ; y = t
-                    lda prngA
-                    sta prngZ  ; z = a
-                    eor prngT
-                    sta prngA  ; a = z ^ t ...
-                    lda prngZ
-                    clc
-                    ror
-                    eor prngA
-                    sta prngA  ; ... ^ (z >> 1)
-                    lda prngT
-                    clc
-                    rol
-                    eor prngA
-                    sta prngA  ; ... ^ (t << 1)
-                    rts
-
-;---------------------------------------------------------------------------------------------------------------------------
 ; Integrated character set, 63 chars standard PETSCII
 ; Chars 34..39 replaced with PETSCII for drawing the frame.
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -1378,8 +1272,6 @@ PRNG_Generate       ; returns one new PRNG byte in A, doesn't clobber any other 
 strCaption          !scr "github.com/c1570/c64-dead-test  20250719" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
-strStackPage        !scr "stack page"                               ; 10 chars fixed text
-strScreenRam        !scr "screen ram"                               ; 10 chars fixed text   
 strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
 strSoundTest        !scr "sound test"                               ; 10 chars fixed text
