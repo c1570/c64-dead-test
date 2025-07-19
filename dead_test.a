@@ -1202,6 +1202,78 @@ Le7b6               sta $07e4
                     rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
+; Strings
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    !align 255,0  ; not strictly necessary
+
+strCaption          !scr "github.com/c1570/c64-dead-test  20250719" ; 40 chars fixed text (one line)
+strCount            !scr "count"                                    ;  5 chars fixed text
+strZeroPage         !scr "zero page"                                ;  9 chars fixed text
+strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
+strColorRam         !scr "color ram"                                ;  9 chars fixed text
+strSoundTest        !scr "sound test"                               ; 10 chars fixed text
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Constants and Tables
+;---------------------------------------------------------------------------------------------------------------------------
+
+ColorTextOk         !hex 05     ; green
+ColorTextBad        !hex 02     ; red
+
+TestPatterns        !hex 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7
+                    !hex ef df bf 7f
+
+ColorRamTP          !hex 00 05 0a 0f 01 02 04 08 0e 0d 0b 07
+
+VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    !hex 00 1b 00 00 00 00 08 00 12 00 00 00 00 00 00 00
+                    !hex 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00
+
+Cia1Init            !hex 00 00 00 00 00
+
+Cia2Init            !hex 00 00 00 00 80
+
+SidFreqV1Hi         !hex 11 15 19 22 19 15 11
+
+SidFreqV1Lo         !hex 25 9a b1 4b b1 9a 25
+
+SidFreqV2Hi         !hex 22 2b 33 44 33 2b 22
+
+SidFreqV2Lo         !hex 4b 34 61 95 61 34 4b
+
+SidFreqV3Hi         !hex 44 56 66 89 66 56 44
+
+SidFreqV3Lo         !hex 95 69 c2 2b c2 69 95
+
+SidWaveForms        !hex 81 45 25 11
+
+SidPWidthLo         !hex 00 00 00 00
+
+SidPWidthHi         !hex 00 08 00 00
+
+StatusHeader        !scr 34, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 35
+
+                    ;     123456789.123456789.123456789.123456789."
+StatusText          !scr 39, "bit    d7  d6  d5  d4  d3  d2  d1  d0 ", 39
+                    !scr 39, "status ok  ok  ok  ok  ok  ok  ok  ok ", 39
+                    !scr 39, "                                      ", 39
+                    !scr 39, " 4164  u12 u24 u11 u23 u10 u22 u9  u21", 39
+                    !scr 39, "250466 u9  u9  u9  u9  u10 u10 u10 u10", 39
+                    !scr 39, "250469 u11 u11 u11 u11 u10 u10 u10 u10", 39
+                    !hex ff
+
+StatusColor         !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
+                    !hex 02 06 06 06 06 06 06 06 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
+                    !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
+                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
+                    !hex 02 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
+                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
+                    !hex ff
+
+StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
+
+;---------------------------------------------------------------------------------------------------------------------------
 ; Integrated character set, 63 chars standard PETSCII
 ; Chars 34..39 replaced with PETSCII for drawing the frame.
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -1274,87 +1346,11 @@ Le7b6               sta $07e4
                     !hex 3c 66 06 0c 18 00 18 00        ; ?
 
 ;---------------------------------------------------------------------------------------------------------------------------
-; Strings
-;---------------------------------------------------------------------------------------------------------------------------
-
-                    !align 255,0  ; not strictly necessary
-
-strCaption          !scr "github.com/c1570/c64-dead-test  20250719" ; 40 chars fixed text (one line)
-strCount            !scr "count"                                    ;  5 chars fixed text
-strZeroPage         !scr "zero page"                                ;  9 chars fixed text
-strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
-strColorRam         !scr "color ram"                                ;  9 chars fixed text
-strSoundTest        !scr "sound test"                               ; 10 chars fixed text
-
-;---------------------------------------------------------------------------------------------------------------------------
-; Constants and Tables
-;---------------------------------------------------------------------------------------------------------------------------
-
-ColorTextOk         !hex 05     ; green
-ColorTextBad        !hex 02     ; red
-
-TestPatterns        !hex 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7 
-                    !hex ef df bf 7f    
-
-ColorRamTP          !hex 00 05 0a 0f 01 02 04 08 0e 0d 0b 07 
-
-VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
-                    !hex 00 1b 00 00 00 00 08 00 12 00 00 00 00 00 00 00 
-                    !hex 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00 
-
-Cia1Init            !hex 00 00 00 00 00 
-
-Cia2Init            !hex 00 00 00 00 80 
-
-SidFreqV1Hi         !hex 11 15 19 22 19 15 11 
-
-SidFreqV1Lo         !hex 25 9a b1 4b b1 9a 25 
-
-SidFreqV2Hi         !hex 22 2b 33 44 33 2b 22 
-
-SidFreqV2Lo         !hex 4b 34 61 95 61 34 4b 
-
-SidFreqV3Hi         !hex 44 56 66 89 66 56 44 
-
-SidFreqV3Lo         !hex 95 69 c2 2b c2 69 95 
-
-SidWaveForms        !hex 81 45 25 11
-
-SidPWidthLo         !hex 00 00 00 00
-                    
-SidPWidthHi         !hex 00 08 00 00
-
-StatusHeader        !scr 34, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 35
-                    
-                    ;     123456789.123456789.123456789.123456789."
-StatusText          !scr 39, "bit    d7  d6  d5  d4  d3  d2  d1  d0 ", 39
-                    !scr 39, "status ok  ok  ok  ok  ok  ok  ok  ok ", 39
-                    !scr 39, "                                      ", 39
-                    !scr 39, " 4164  u12 u24 u11 u23 u10 u22 u9  u21", 39
-                    !scr 39, "250466 u9  u9  u9  u9  u10 u10 u10 u10", 39
-                    !scr 39, "250469 u11 u11 u11 u11 u10 u10 u10 u10", 39
-                    !hex ff
-
-StatusColor         !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
-                    !hex 02 06 06 06 06 06 06 06 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
-                    !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 02
-                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
-                    !hex 02 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 0f 02
-                    !hex 02 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 0c 02
-                    !hex ff 
-
-StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
-
-                    *= $fdf0                            ; Interrupt service routine
-                    
-:ISR                rti
-
-;---------------------------------------------------------------------------------------------------------------------------
 ; CPU vectors
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    *= $fffa	
-
+                    *= $fff9                            ; Interrupt service routine
+:ISR                rti
                     !word Reset_Handler
                     !word Reset_Handler
                     !word ISR
