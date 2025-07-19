@@ -82,6 +82,11 @@ tmp1Ptr        = $09
 tmp1PtrHi      = tmp1Ptr + 1
 tmp2Ptr        = $0b
 tmp2PtrHi      = tmp2Ptr + 1
+prngX          = $0d
+prngY          = prngX + 1
+prngZ          = prngY + 1
+prngA          = prngZ + 1
+prngT          = prngA + 1
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; start of code
@@ -93,12 +98,12 @@ tmp2PtrHi      = tmp2Ptr + 1
                     !hex 00 e0 00 e0 c3 c2 cd 38 30         ; Vectors and "CBM80" for normal cartridge use
                                                             ; not used at the moment, could be useful when trying to
                                                             ; merge 586220 and 781220 to a single dual-use-cartridge
-                    
-                    *= $f000                                ; So this is the start of the "Ultimax Part" :-)
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Program Start
 ;---------------------------------------------------------------------------------------------------------------------------
+
+                    *= $f000                                ; So this is the start of the "Ultimax Part" :-)
 
 Reset_Handler       sei
                     ldx #$ff                
@@ -796,26 +801,57 @@ Test_RamTest_1      lda strRamTest,x
                     ldy #$08
                     stx tmp1Ptr
                     sty tmp1PtrHi
+                    ldx passCounterLo
+                    inx                     ; avoid seeding PRNG with 0
+                    txa
+                    jsr PRNG_Init
 Test_RamTest_2      ldy #$00
                     ldx #$13
 Test_RamTest_3      lda TestPatterns,x
                     sta (tmp1Ptr),y
                     txa
-                    ldx #$7f
-Test_RamTest_4      dex
-                    bne Test_RamTest_4
+                    ldx #$7f                ; delay
+-                   dex
+                    bne -
                     tax
                     lda (tmp1Ptr),y
                     cmp TestPatterns,x
-                    bne Test_RamTest_Error
-                    dex
+                    beq +
+                    eor TestPatterns,x
+                    jmp Test_RamTest_Error
++                   dex
                     bpl Test_RamTest_3
-                    inc tmp1Ptr
-                    bne Test_RamTest_5
+                    jsr PRNG_Generate
+                    sta (tmp1Ptr),y         ; store PRNG byte
+                    inc tmp1Ptr             ; next address
+                    bne Test_RamTest_2
                     inc tmp1PtrHi
-Test_RamTest_5      lda tmp1PtrHi
+                    lda tmp1PtrHi
                     cmp #$10
                     bne Test_RamTest_2
+
+                    ; verify PRNG bytes
+                    ldx passCounterLo
+                    inx
+                    txa
+                    jsr PRNG_Init
+                    ldy #$08
+                    sty tmp1PtrHi
+                    ldy #$00
+                    sty tmp1Ptr
+-                   jsr PRNG_Generate
+                    cmp (tmp1Ptr),y
+                    beq +
+                    eor (tmp1Ptr),y
+                    jmp Test_RamTest_Error
++                   iny
+                    bne -
+                    inc tmp1PtrHi
+                    lda tmp1PtrHi
+                    cmp #$10
+                    bne -
+
+                    ; all ok
                     lda #$0f                ; "O"
                     sta $04fd
                     lda #$0b                ; "K"
@@ -825,7 +861,7 @@ Test_RamTest_5      lda tmp1PtrHi
                     sta $d8fe
                     rts
                     
-Test_RamTest_Error  eor TestPatterns,x
+Test_RamTest_Error  ; expects bit errors in A
                     tax
                     lda #$02                ; "B"
                     sta $04fd               
@@ -1223,20 +1259,59 @@ Le7b6               sta $07e4
                     rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
-; This code/data is obviously not used?
+; PRNG routine
 ;---------------------------------------------------------------------------------------------------------------------------
 
-;                   *= $e8a0                                    ; ???
-;                    
-;                   !hex 09 00 28 ff 1f af 
+; the following is a port of rng-4261412736 by Edward Rosten, https://github.com/edrosten/8bit_rng
+; based on the xorshift algorithm
+
+PRNG_Init           ; init PRNG using A as seed
+                    sta prngA
+                    lda #$00
+                    sta prngX
+                    sta prngY
+                    sta prngZ
+                    jsr PRNG_Generate  ; warm up a bit
+                    jsr PRNG_Generate
+                    jsr PRNG_Generate
+                    rts
+
+PRNG_Generate       ; returns one new PRNG byte in A, doesn't clobber any other register
+                    lda prngX
+                    rol
+                    rol
+                    rol
+                    rol
+                    and #$f0
+                    eor prngX
+                    sta prngT  ; t = x ^ (x << 4)
+                    lda prngY
+                    sta prngX  ; x = y
+                    lda prngZ
+                    sta prngY  ; y = t
+                    lda prngA
+                    sta prngZ  ; z = a
+                    eor prngT
+                    sta prngA  ; a = z ^ t ...
+                    lda prngZ
+                    clc
+                    ror
+                    eor prngA
+                    sta prngA  ; ... ^ (z >> 1)
+                    lda prngT
+                    clc
+                    rol
+                    eor prngA
+                    sta prngA  ; ... ^ (t << 1)
+                    rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Strings
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    *= $f900	
+                    !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250717" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250719" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
