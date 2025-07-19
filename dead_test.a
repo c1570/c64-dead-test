@@ -11,18 +11,13 @@
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
-; ROM layout for original "Dead Test"
-;
-; $EAD8..$ECD7 = contains char set
-;
-;---------------------------------------------------------------------------------------------------------------------------
-;
 ; Memory layout for "Dead Test"
 ;
 ; $0400..$07FF = screen RAM
 ; $0800..$09FF = char set in RAM
 ; $D800..$DBFF = color RAM
 ; $DC00..$DFFF = I/O
+; $F800..$F9FF = char set in ROM
 ; 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -48,7 +43,7 @@
 ;
 ; Initial RAM Test using test patterns 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7 ef df bf 7f
 ;
-; Pattern 00 "00000000"   -> light grey       		 CASS MOTOR = 0 ; CASS SENSE = 0 - inverted on every single next step
+; Pattern 00 "00000000"   -> light grey		 CASS MOTOR = 0 ; CASS SENSE = 0 - inverted on every single next step
 ; Pattern 55 "01010101"   -> light blue
 ; Pattern aa "10101010"   -> light green
 ; Pattern ff "11111111"   -> grey
@@ -93,17 +88,7 @@ prngT          = prngA + 1
 ;---------------------------------------------------------------------------------------------------------------------------
 
 
-                    *= $e000	
-
-                    !hex 00 e0 00 e0 c3 c2 cd 38 30         ; Vectors and "CBM80" for normal cartridge use
-                                                            ; not used at the moment, could be useful when trying to
-                                                            ; merge 586220 and 781220 to a single dual-use-cartridge
-
-;---------------------------------------------------------------------------------------------------------------------------
-; Program Start
-;---------------------------------------------------------------------------------------------------------------------------
-
-                    *= $f000                                ; So this is the start of the "Ultimax Part" :-)
+                    *= $e000
 
 Reset_Handler       sei
                     ldx #$ff                
@@ -128,7 +113,7 @@ CopyCharSet1        lda #$30                ; xxMSWxxx : CASS MOTOR = "M",   CAS
                     eor $01                 ; 00110000 ; flip CASS MOTOR and CASS SENSE
                     sta $01
 
-					lda #<CharSet           ; copy char set to $0800
+                    lda #<CharSet           ; copy char set to $0800
                     ldx #>CharSet
                     sta tmp1Ptr
                     stx tmp1PtrHi
@@ -792,9 +777,14 @@ Le454               eor ColorRamTP,x
 ; RAM Test First 4 kByte
 ;---------------------------------------------------------------------------------------------------------------------------
                     
-Test_RamTest        ldx #$0b
+Test_RamTest        lda #($3800/$0800*2)    ; VIC-II sees ROM $F000 at $3000:
+                    sta $d018               ; show charset from ROM
+                    ldx #66
 Test_RamTest_1      lda strRamTest,x
+                    cpx #$0c
+                    bcs +
                     sta $04f0,x
++                   sta 40,x
                     dex
                     bpl Test_RamTest_1
                     ldx #$00
@@ -805,8 +795,8 @@ Test_RamTest_1      lda strRamTest,x
                     inx                     ; avoid seeding PRNG with 0
                     txa
                     jsr PRNG_Init
-Test_RamTest_2      ldy #$00
-                    ldx #$13
+                    ldy #$00
+Test_RamTest_2      ldx #$13
 Test_RamTest_3      lda TestPatterns,x
                     sta (tmp1Ptr),y
                     txa
@@ -859,6 +849,8 @@ Test_RamTest_3      lda TestPatterns,x
                     lda ColorTextOk
                     sta $d8fd
                     sta $d8fe
+                    lda VicInit+$18
+                    sta $d018               ; switch VIC-II to RAM again
                     rts
                     
 Test_RamTest_Error  ; expects bit errors in A
@@ -1306,6 +1298,78 @@ PRNG_Generate       ; returns one new PRNG byte in A, doesn't clobber any other 
                     rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
+; Integrated character set, 63 chars standard PETSCII
+; Chars 34..39 replaced with PETSCII for drawing the frame.
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    * = $f800       ; fixed position as we switch to ROM charset occasionally
+
+:CharSet            !hex 3c 66 6e 6e 60 62 3c 00        ; @
+                    !hex 18 3c 66 7e 66 66 66 00        ; A
+                    !hex 7c 66 66 7c 66 66 7c 00        ; B
+                    !hex 3c 66 60 60 60 66 3c 00        ; C
+                    !hex 78 6c 66 66 66 6c 78 00        ; D
+                    !hex 7e 60 60 78 60 60 7e 00        ; E
+                    !hex 7e 60 60 78 60 60 60 00        ; F
+                    !hex 3c 66 60 6e 66 66 3c 00        ; G
+                    !hex 66 66 66 7e 66 66 66 00        ; H
+                    !hex 3c 18 18 18 18 18 3c 00        ; I
+                    !hex 1e 0c 0c 0c 0c 6c 38 00        ; J
+                    !hex 66 6c 78 70 78 6c 66 00        ; K
+                    !hex 60 60 60 60 60 60 7e 00        ; L
+                    !hex 63 77 7f 6b 63 63 63 00        ; M
+                    !hex 66 76 7e 7e 6e 66 66 00        ; N
+                    !hex 3c 66 66 66 66 66 3c 00        ; O
+                    !hex 7c 66 66 7c 60 60 60 00        ; P
+                    !hex 3c 66 66 66 66 3c 0e 00        ; Q
+                    !hex 7c 66 66 7c 78 6c 66 00        ; R
+                    !hex 3c 66 60 3c 06 66 3c 00        ; S
+                    !hex 7e 18 18 18 18 18 18 00        ; T
+                    !hex 66 66 66 66 66 66 3c 00        ; U
+                    !hex 66 66 66 66 66 3c 18 00        ; V
+                    !hex 63 63 63 6b 7f 77 63 00        ; W
+                    !hex 66 66 3c 18 3c 66 66 00        ; X
+                    !hex 66 66 66 3c 18 18 18 00        ; Y
+                    !hex 7e 06 0c 18 30 60 7e 00        ; Z
+                    !hex 3c 30 30 30 30 30 3c 00        ; [
+                    !hex 0e 10 30 fe 30 60 ff 00        ; <pound symbol>
+                    !hex 3c 0c 0c 0c 0c 0c 3c 00        ; ]
+                    !hex 00 18 3c 7e 18 18 18 18        ; <arrow up>
+                    !hex 00 10 30 7f 7f 30 10 00        ; <arrow left>
+                    !hex 00 00 00 00 00 00 00 00        ; <space>
+                    !hex 18 18 18 18 00 00 18 00        ; !
+                    !hex 00 00 00 07 0f 1c 18 18        ; <frame upper left corner>
+                    !hex 00 00 00 e0 f0 38 18 18        ; <frame upper right corner>
+                    !hex 18 18 1c 0f 07 00 00 00        ; <frame lower left corner>
+                    !hex 18 18 38 f0 e0 00 00 00        ; <frame lower right corner>
+                    !hex 00 00 00 ff ff 00 00 00        ; <frame horizontal line>
+                    !hex 18 18 18 18 18 18 18 18        ; <frame vertical line>
+                    !hex 0c 18 30 30 30 18 0c 00        ; (
+                    !hex 30 18 0c 0c 0c 18 30 00        ; )
+                    !hex 00 66 3c ff 3c 66 00 00        ; *
+                    !hex 00 18 18 7e 18 18 00 00        ; +
+                    !hex 00 00 00 00 00 18 18 30        ; ,
+                    !hex 00 00 00 7e 00 00 00 00        ; -
+                    !hex 00 00 00 00 00 18 18 00        ; .
+                    !hex 00 03 06 0c 18 30 60 00        ; /
+                    !hex 3c 66 6e 76 66 66 3c 00        ; 0
+                    !hex 18 18 38 18 18 18 7e 00        ; 1
+                    !hex 3c 66 06 0c 30 60 7e 00        ; 2
+                    !hex 3c 66 06 1c 06 66 3c 00        ; 3
+                    !hex 06 0e 1e 66 7f 06 06 00        ; 4
+                    !hex 7e 60 7c 06 06 66 3c 00        ; 5
+                    !hex 3c 66 60 7c 66 66 3c 00        ; 6
+                    !hex 7e 66 0c 18 18 18 18 00        ; 7
+                    !hex 3c 66 66 3c 66 66 3c 00        ; 8
+                    !hex 3c 66 66 3e 06 66 3c 00        ; 9
+                    !hex 00 00 00 18 00 00 18 00        ; :
+                    !hex 00 00 18 00 00 18 18 30        ; ;
+                    !hex 0e 18 30 60 30 18 0e 00        ; <
+                    !hex 00 00 7e 00 7e 00 00 00        ; =
+                    !hex 70 18 0c 06 0c 18 70 00        ; >
+                    !hex 3c 66 06 0c 18 00 18 00        ; ?
+
+;---------------------------------------------------------------------------------------------------------------------------
 ; Strings
 ;---------------------------------------------------------------------------------------------------------------------------
 
@@ -1316,7 +1380,7 @@ strCount            !scr "count"                                    ;  5 chars f
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strStackPage        !scr "stack page"                               ; 10 chars fixed text
 strScreenRam        !scr "screen ram"                               ; 10 chars fixed text   
-strRamTest          !scr "ram test 4kb"                             ;  8 chars fixed text
+strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
 strSoundTest        !scr "sound test"                               ; 10 chars fixed text
 
@@ -1379,132 +1443,16 @@ StatusColor         !hex 02 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 06 0
 
 StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
 
-;---------------------------------------------------------------------------------------------------------------------------
-; Integrated character set 
-; Originally 58 chars from 0..57, location in 781220 was $EAD8..$ECA7
-; Now extended to 63 chars standard PETSCII. 
-; Chars 34..39 replaced with PETSCII for drawing the frame.
-;---------------------------------------------------------------------------------------------------------------------------
-
                     *= $fdf0                            ; Interrupt service routine
                     
 :ISR                rti
 
-                    *= $fdfa                            ; 6 bytes CPU vectors follow behind
-:CharSet            !hex 3c 66 6e 6e 60 62 3c 00        ; @
-;
-; "Comic" character set disabled
-;                        
-;                    !hex 7e 42 42 7e 46 46 46 00        ; A
-;                    !hex 7e 62 62 7e 62 62 7e 00        ; B 
-;                    !hex 7e 42 40 40 40 42 7e 00        ; C
-;                    !hex 7e 42 42 62 62 62 7e 00        ; D
-;                    !hex 7e 60 60 78 70 70 7e 00        ; E
-;                    !hex 7e 60 60 78 70 70 70 00        ; F
-;                    !hex 7e 42 40 6e 62 62 7e 00        ; G
-;                    !hex 42 42 42 7e 62 62 62 00        ; H
-;                    !hex 10 10 10 18 18 18 18 00        ; I
-;                    !hex 04 04 04 06 06 66 7e 00        ; J
-;                    !hex 42 44 48 7e 66 66 66 00        ; K
-;                    !hex 40 40 40 60 60 60 7e 00        ; L
-;                    !hex 43 67 5b 43 43 43 43 00        ; M
-;                    !hex e2 d2 ca c6 c2 c2 c2 00        ; N
-;                    !hex 7e 42 42 46 46 46 7e 00        ; O
-;                    !hex 7e 42 42 7e 60 60 60 00        ; P
-;                    !hex 7e 42 42 62 6a 66 7e 00        ; Q
-;                    !hex 7e 42 42 7e 68 64 62 00        ; R
-;                    !hex 7e 42 40 7e 02 62 7e 00        ; S
-;                    !hex 7e 18 18 18 18 18 18 00        ; T
-;                    !hex 62 62 62 62 62 62 3c 00        ; U
-;                    !hex 62 62 62 62 62 24 18 00        ; V
-;                    !hex c2 c2 c2 c2 da e6 c2 00        ; W
-;                    !hex 62 62 24 18 24 62 62 00        ; X
-;                    !hex 62 62 62 34 18 18 18 00        ; Y
-;                    !hex 7f 03 06 08 10 60 7f 00        ; Z
-;
-                    !hex 18 3c 66 7e 66 66 66 00        ; A  
-                    !hex 7c 66 66 7c 66 66 7c 00        ; B 
-                    !hex 3c 66 60 60 60 66 3c 00        ; C
-                    !hex 78 6c 66 66 66 6c 78 00        ; D
-                    !hex 7e 60 60 78 60 60 7e 00        ; E
-                    !hex 7e 60 60 78 60 60 60 00        ; F
-                    !hex 3c 66 60 6e 66 66 3c 00        ; G
-                    !hex 66 66 66 7e 66 66 66 00        ; H
-                    !hex 3c 18 18 18 18 18 3c 00        ; I
-                    !hex 1e 0c 0c 0c 0c 6c 38 00        ; J
-                    !hex 66 6c 78 70 78 6c 66 00        ; K
-                    !hex 60 60 60 60 60 60 7e 00        ; L
-                    !hex 63 77 7f 6b 63 63 63 00        ; M
-                    !hex 66 76 7e 7e 6e 66 66 00        ; N
-                    !hex 3c 66 66 66 66 66 3c 00        ; O
-                    !hex 7c 66 66 7c 60 60 60 00        ; P
-                    !hex 3c 66 66 66 66 3c 0e 00        ; Q
-                    !hex 7c 66 66 7c 78 6c 66 00        ; R
-                    !hex 3c 66 60 3c 06 66 3c 00        ; S
-                    !hex 7e 18 18 18 18 18 18 00        ; T
-                    !hex 66 66 66 66 66 66 3c 00        ; U
-                    !hex 66 66 66 66 66 3c 18 00        ; V
-                    !hex 63 63 63 6b 7f 77 63 00        ; W
-                    !hex 66 66 3c 18 3c 66 66 00        ; X
-                    !hex 66 66 66 3c 18 18 18 00        ; Y
-                    !hex 7e 06 0c 18 30 60 7e 00        ; Z
-                    !hex 3c 30 30 30 30 30 3c 00        ; [
-                    !hex 0e 10 30 fe 30 60 ff 00        ; <pound symbol>
-                    !hex 3c 0c 0c 0c 0c 0c 3c 00        ; ]
-                    !hex 00 18 3c 7e 18 18 18 18        ; <arrow up>
-                    !hex 00 10 30 7f 7f 30 10 00        ; <arrow left>
-                    !hex 00 00 00 00 00 00 00 00        ; <space>
-                    !hex 18 18 18 18 00 00 18 00        ; !
-                    !hex 00 00 00 07 0f 1c 18 18        ; <frame upper left corner>
-                    !hex 00 00 00 e0 f0 38 18 18        ; <frame upper right corner>
-                    !hex 18 18 1c 0f 07 00 00 00        ; <frame lower left corner>
-                    !hex 18 18 38 f0 e0 00 00 00        ; <frame lower right corner>
-                    !hex 00 00 00 ff ff 00 00 00        ; <frame horizontal line>
-                    !hex 18 18 18 18 18 18 18 18        ; <frame vertical line>
-                    !hex 0c 18 30 30 30 18 0c 00        ; (
-                    !hex 30 18 0c 0c 0c 18 30 00        ; )
-                    !hex 00 66 3c ff 3c 66 00 00        ; *
-                    !hex 00 18 18 7e 18 18 00 00        ; +
-                    !hex 00 00 00 00 00 18 18 30        ; ,
-                    !hex 00 00 00 7e 00 00 00 00        ; -
-                    !hex 00 00 00 00 00 18 18 00        ; .
-                    !hex 00 03 06 0c 18 30 60 00        ; /
-;
-; "Comic" character set disabled
-;                        
-;                    !hex 7e 42 42 42 42 42 7e 00        ; 0
-;                    !hex 30 30 10 10 3c 3c 3c 00        ; 1
-;                    !hex 7e 02 02 7e 40 40 7e 00        ; 2
-;                    !hex 7e 02 02 7e 06 06 7e 00        ; 3
-;                    !hex 60 60 60 66 7e 06 06 00        ; 4
-;                    !hex 7e 40 40 7e 02 02 7e 00        ; 5
-;                    !hex 78 48 40 7e 42 42 7e 00        ; 6
-;                    !hex 7e 42 04 08 08 08 08 00        ; 7
-;                    !hex 3c 24 24 3c 66 66 7e 00        ; 8
-;                    !hex 7e 42 42 7e 06 06 06 00        ; 9
-;
-                    !hex 3c 66 6e 76 66 66 3c 00        ; 0
-                    !hex 18 18 38 18 18 18 7e 00        ; 1
-                    !hex 3c 66 06 0c 30 60 7e 00        ; 2
-                    !hex 3c 66 06 1c 06 66 3c 00        ; 3
-                    !hex 06 0e 1e 66 7f 06 06 00        ; 4
-                    !hex 7e 60 7c 06 06 66 3c 00        ; 5
-                    !hex 3c 66 60 7c 66 66 3c 00        ; 6
-                    !hex 7e 66 0c 18 18 18 18 00        ; 7
-                    !hex 3c 66 66 3c 66 66 3c 00        ; 8
-                    !hex 3c 66 66 3e 06 66 3c 00        ; 9
-                    !hex 00 00 00 18 00 00 18 00        ; :
-                    !hex 00 00 18 00 00 18 18 30        ; ;
-                    !hex 0e 18 30 60 30 18 0e 00        ; <
-                    !hex 00 00 7e 00 7e 00 00 00        ; = 
-                    !hex 70 18 0c 06 0c 18 70 00        ; >
-                    !hex 3c 66 06 0c 18 00 18 00        ; ? 
-                    
 ;---------------------------------------------------------------------------------------------------------------------------
 ; CPU vectors
 ;---------------------------------------------------------------------------------------------------------------------------
 
                     *= $fffa	
 
-                    !hex 00 f0 00 f0 f0 fd
-
+                    !word Reset_Handler
+                    !word Reset_Handler
+                    !word ISR
