@@ -17,22 +17,23 @@ Version 002 to 006 modifications by Kinzi.
 
 In short, on power up, the cartridge will...
 1. set screen to light gray immediately after power on
-2. do a simple RAM check with different byte patterns (blank screen/changing colors, about 9 seconds)
+2. perform a simple self integrity check that checks reading the dead test ROM (15 flashes in case of an error)
+3. run a simple RAM check with different byte patterns (blank screen/changing colors, about 9 seconds)
    - any bit errors will be shown by a blinking pattern, 1 flash = D7, 2 flashes = D6, etc., see [dead_test_ok.png](/dead_test_ok.png) for mappings to ICs
-3. do a more thorough RAM check of $0002-$01FF (blank screen/fast changing colors, about 3 seconds)
+4. run a more thorough RAM check of $0002-$01FF (blank screen/fast changing colors, about 3 seconds)
    - errors will be shown by the screen flashing 10 times (indicating problems in RAM addressing - check U13/U25 and surrounding PCB traces)
-4. after that, the text screen will be shown, running more tests in an infinite loop
+5. after that, the text screen will be shown, running more tests in an infinite loop
    - during the RAM test, screen output will be (mostly) random text (VIC-II screen mem set to $0000, charset to cartridge ROM $F800; otherwise screen mem $0400 and charset RAM $0800)
    - sound will play about 40 seconds after initial power on
-   - each loop of step 4 takes about 40 seconds
+   - each loop of step 5 takes about 40 seconds
    - during the RAM test, in case the "ram test is running, screen will be restored in a few seconds" message/charset is garbled, the VIC-II cannot access ROM properly (check U26 and surrounding PCB traces or PLA)
-   - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 3
+   - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 4
 
 If all tests pass, you can assume that CPU, PLA, VIC-II and RAM (**first 4k only**) are working to some degree.
 This test **does not** test ROMs nor RAM above 4k nor CIAs (properly).
 In fact, this test will work fine without CIA1 (and often CIA2 as well), without SID, and without any ROMs.
 
-Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 2 above), or flip their status every few dozen seconds while the continuous tests are running (step 4).
+Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 3 above), or flip their status every few dozen seconds while the continuous tests are running (step 5).
 
 ## KERNAL ROM mode
 If used as KERNAL ROM, after the sound check, another RAM test pass up to the full 64KBytes is done.

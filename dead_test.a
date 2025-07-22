@@ -210,7 +210,7 @@ Reset_Handler       sei
                     lda #$37                ; xx110xxx : CASS MOTOR = out, CASS SENSE = out, CASS WRITE = in
                     sta $00
                     
-                    jmp InitialRamTest      ; jump to initial RAM test
+                    jmp IntegrityTest       ; jump to ROM integrity test
                     
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Main Test
@@ -375,6 +375,24 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
                     beq +
                     jmp Test_RamTest_Return
 +                   rts
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Initial ROM Integrity Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+IntegrityTest       lda #$00
+                    ldx #$10
+--                  ldy #$00
+-                   !for Iter, 0, 31 { eor $e000 + Iter * $0100,y }
+                    iny
+                    bne -
+                    cmp #$00  ; ROMChecksum is added in build process
+                    bne IntegrityError
+                    dex
+                    bne -
+                    beq InitialRamTest
+IntegrityError      ldx #15
+                    jmp RTBlinkX
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Initial RAM Test 
@@ -1326,7 +1344,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250721" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250722" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
@@ -1466,10 +1484,13 @@ StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
                     !hex 3c 66 06 0c 18 00 18 00        ; ?
 
 ;---------------------------------------------------------------------------------------------------------------------------
-; CPU vectors
+; CPU vectors, etc
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    *= $fff9                            ; Interrupt service routine
+                    * = $fff8
+:ROMChecksum        !hex 00
+
+                    * = $fff9                           ; Interrupt service routine
 :ISR                rti
                     !word Reset_Handler
                     !word Reset_Handler
