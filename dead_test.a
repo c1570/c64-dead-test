@@ -75,6 +75,8 @@ passCounterLo  = $02
 passCounterHi  = passCounterLo + 1
 tmp1Ptr        = passCounterHi + 1
 tmp1PtrHi      = tmp1Ptr + 1
+tmp2Ptr        = tmp1PtrHi + 1    ; don't use along with prng
+tmp2PtrHi      = tmp2Ptr + 1
 prngX          = tmp1PtrHi + 1
 prngY          = prngX + 1
 prngZ          = prngY + 1
@@ -1079,128 +1081,98 @@ Test_RamTest64k_ex  rts
 ; Sound Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
+SidDataFreqs        !hex 14 00 25 11 9a 15 b1 19 4b 22 b1 19 9a 15 ff ; volume, regoff, (freqlo,freqhi)*x, endflag
+                    !hex 18 07 4b 22 34 2b 61 33 95 44 61 33 34 2b ff
+                    !hex 1f 0e 95 44 69 56 c2 66 2b 89 c2 66 69 56 00
+SidDataWaves        !hex 11 25 45 81 00
+SidRegOff = prngA
+
 Test_SoundTest      lda #31                 ; arrow left
                     sta ScreenMemStart+SoundMsgOff+13
-                    lda #$14
-                    sta $d418
-                    lda #$00
-                    sta $d417
-                    lda #$3e
-                    sta $d405
-                    lda #$ca
-                    sta $d406
-                    lda #$00
-                    sta $d412
-                    lda #$03                ; cycle through 4 waveforms
-TestNextWaveForm    pha                     ; save waveform index on stack
 
-                    ldx #$06                ; play 7 notes
-PlayVoice1          lda SidFreqV1Hi,x       ; on voice #1
-                    sta $d401
-                    lda SidFreqV1Lo,x
-                    sta $d400
-
-                    pla                     ; restore waveform index         
-                    tay                     ; from stack
-                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
-                    sta $d402               ; set pulse width LO              
-                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
-                    sta $d403               ; set pulse width HI              
-                    lda SidWaveForms,y      ; load waveform value for index no. Y
-                    sta $d404               ; set waveform
-                    tya                     ; save waveform index
-                    pha                     ; on stack
+                    ldy #$18
+                    lda #$00
+-                   sta $d400,y            ; init SID registers to 0
+                    dey
+                    bpl -
                     
-                    lda #$6a
-                    jsr SoundDelayLoop
-                    lda #$00
-                    sta $d404
-                    lda #$00
-                    jsr SoundDelayLoop
-                    dex
-                    bne PlayVoice1
-                    lda #$00
-                    sta $d417
-                    lda #$18
-                    sta $d418
-                    lda #$3e
-                    sta $d40c
-                    lda #$ca
-                    sta $d40d
-
-                    ldx #$06                ; play 7 notes
-PlayVoice2          lda SidFreqV2Hi,x       ; on voice #2
-                    sta $d408
-                    lda SidFreqV2Lo,x
-                    sta $d407
-                    pla                     ; restore waveform index         
-                    tay                     ; from stack
-                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
-                    sta $d409
-                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
+                    lda #$08               ; pulse width for all voices
+                    sta $d403
                     sta $d40a
-                    lda SidWaveForms,y      ; load waveform value for index no. Y
-                    sta $d40b
-                    tya                     ; save waveform index         
-                    pha                     ; on stack
-                    lda #$6a
-                    jsr SoundDelayLoop
-                    lda #$00
-                    sta $d40b
-                    lda #$00
-                    jsr SoundDelayLoop
-                    dex
-                    bne PlayVoice2
-                    lda #$00
-                    sta $d417
-                    lda #$1f
-                    sta $d418
-                    lda #$3e
+                    sta $d411
+                    lda #$3a               ; attack for all voices
+                    sta $d405
+                    sta $d40c
                     sta $d413
-                    lda #$ca
+                    lda #$ca               ; sustain for all voices
+                    sta $d406
+                    sta $d40d
                     sta $d414
 
-                    ldx #$06                ; play 7 notes
-PlayVoice3          lda SidFreqV3Hi,x       ; on voice #3
-                    sta $d40f
-                    lda SidFreqV3Lo,x
-                    sta $d40e
-                    pla
-                    tay
-                    lda SidPWidthLo,y       ; load pulse width value LO for index no. Y
-                    sta $d410
-                    lda SidPWidthHi,y       ; load pulse width value HI for index no. Y
-                    sta $d411
-                    lda SidWaveForms,y      ; load waveform value for index no. Y
-                    sta $d412
-                    tya
-                    pha
-                    lda #$6a
-                    jsr SoundDelayLoop
-                    lda #$00
-                    sta $d412
-                    lda #$00
-                    jsr SoundDelayLoop
-                    dex
-                    bne PlayVoice3
-                    pla
-                    tay
-                    dey
-                    tya
-                    bmi SoundTestComplete
-                    jmp TestNextWaveForm    ; start over with next waveform
-                    
-SoundTestComplete   lda #$00                ; shut down SID
+                    lda #>(SidDataWaves)
+                    sta tmp1PtrHi
+                    lda #<(SidDataWaves)
+                    sta tmp1Ptr
+
+Test_SoundNextWave  ldy #$00               ; Y=data offset, X=SID register offset
+                    lda #>(SidDataFreqs)
+                    sta tmp2PtrHi
+                    lda #<(SidDataFreqs)
+                    sta tmp2Ptr
+
+Test_SoundNextVce   lda (tmp2Ptr),y
+                    sta $d418              ; init volume
+                    iny
+                    lda (tmp2Ptr),y        ; get register offset
+                    sta SidRegOff
+                    iny
+Test_SoundNextNote  ldx SidRegOff
+                    lda (tmp2Ptr),y        ; init freqlo
+                    bne +
+                    inc tmp1Ptr            ; played all notes, next waveform
+                    ldy #$00
+                    lda (tmp1Ptr),y
+                    bne Test_SoundNextWave
+                    lda #$00               ; shut down SID
                     sta $d418
                     rts
 
++                   cmp #$ff
+                    bne +
+                    iny                    ; next voice (and volume)
+                    bne Test_SoundNextVce  ; unconditional jump
+
++                   sta $d400,x
+                    inx
+                    iny
+                    lda (tmp2Ptr),y        ; init freqhi
+                    sta $d400,x
+                    tya
+                    pha
+                    ldy #$00
+                    lda (tmp1Ptr),y        ; get waveform
+                    inx
+                    inx
+                    inx
+                    sta $d400,x            ; start sound
+                    lda #$6a
+
+                    jsr SoundDelayLoop
+
+                    pla
+                    tay
+                    lda #$00               ; stop sound
+                    sta $d400,x
+                    iny
+                    bne Test_SoundNextNote ; unconditional jump
+
+
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Delay Loop for Sounds
+; clobbers Y
 ;---------------------------------------------------------------------------------------------------------------------------
 
-SoundDelayLoop      cmp #$00
-                    beq SoundDelayLoopCpl
-                    tay
+SoundDelayLoop      tay
                     txa
                     pha
                     tya
@@ -1371,24 +1343,6 @@ VicInit             !hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
 Cia1Init            !hex 00 00 00 00 00
 
 Cia2Init            !hex 00 00 00 00 80
-
-SidFreqV1Hi         !hex 11 15 19 22 19 15 11
-
-SidFreqV1Lo         !hex 25 9a b1 4b b1 9a 25
-
-SidFreqV2Hi         !hex 22 2b 33 44 33 2b 22
-
-SidFreqV2Lo         !hex 4b 34 61 95 61 34 4b
-
-SidFreqV3Hi         !hex 44 56 66 89 66 56 44
-
-SidFreqV3Lo         !hex 95 69 c2 2b c2 69 95
-
-SidWaveForms        !hex 81 45 25 11
-
-SidPWidthLo         !hex 00 00 00 00
-
-SidPWidthHi         !hex 00 08 00 00
 
 StatusHeader        !scr 34, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 35
 
