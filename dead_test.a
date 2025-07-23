@@ -16,10 +16,11 @@
 ;
 ; $0400..$07FF = screen RAM
 ; $0800..$09FF = char set in RAM
+; $0A00..$0FFF = Sound test and RAM 64k test (RAM 64k test is only run in RAM/KERNAL mode)
 ; $D800..$DBFF = color RAM
 ; $DC00..$DFFF = I/O
 ; $F800..$F9FF = char set in ROM
-; 
+;
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
 ; CPU I/O Port:
@@ -86,6 +87,11 @@ prngT          = prngA + 1
 
 firstUnusedZP  = prngT + 1
 
+CharSetInRamStart    = $0800  ; charset uses 512 bytes
+TestsInRamStart      = $0a00  ; Location to copy tests running from RAM to
+TestsInRamEnd        = $1000
+RelocatableCodeStart = $ea00
+
 ScreenMemStart = $0400
 ColMemStart = $d800
 
@@ -151,12 +157,12 @@ Ram64MsgOff = 240
                     sta $01
 }
 
-!macro CopyCharSet_AY { ; copy charset from ROM to RAM $0800, clobbers A,Y
+!macro CopyCharSet_AY { ; copy charset from ROM to RAM, clobbers A,Y
                     ldy #$00
 -                   lda CharSet,y
-                    sta $0800,y
+                    sta CharSetInRamStart,y
                     lda CharSet+$0100,y
-                    sta $0900,y
+                    sta CharSetInRamStart+$0100,y
                     iny
                     bne -
 }
@@ -178,6 +184,18 @@ Ram64MsgOff = 240
                     lda .color
                     !for @index, 0, @length - 1 {
                       sta ColMemStart + .offset + @index
+                    }
+}
+
+!macro WriteStrYOff_A .screenStart, .offset, .color, @str {
+                    @length = len(@str)
+                    !for @index, 0, @length - 1 {
+                      lda #@str[@index]
+                      sta .screenStart + .offset + @index, y
+                    }
+                    lda .color
+                    !for @index, 0, @length - 1 {
+                      sta ColMemStart + .offset + @index, y
                     }
 }
 
@@ -234,7 +252,6 @@ Reset_Handler       sei
 ;---------------------------------------------------------------------------------------------------------------------------
 
 MainTestStart       +Flip_Cass_Port_A
-                    +CopyCharSet_AY
 
 CiaRegInit1         ldx #$04
 CiaRegInit1_1       lda Cia1Init,x          ; CIA init
@@ -270,23 +287,20 @@ MainTestLoop        ldx #$2f                ; VIC register init
                     jsr UpdateTod1Display
                     jsr Test_ColorRam
                     jsr UpdateTod1Display
+
+                    ; RAM test code is kept small in case it's running from RAM
+                    +UltimaxMode_A
+                    bcc +
+                    lda #($3800/$0800*2)    ; VIC-II sees ROM $F000 at $3000 in Ultimax mode
+                    bcs ++
++                   lda #($1000/$0800*2)    ; VIC-II sees CharROM at $1000 in normal mode
+++                  sta $d018               ; show charset from ROM
+                    +CopyStr_AX strRamTest, RamTestMsgScrStart, RamTestLongMsgLen
                     jmp Test_RamTest        ; Clobbers everything but the very first ZP bytes so don't use JSR
-BackFromRAMTest     jsr UpdateTod1Display
-                    jsr Test_SoundTest
+BackFromRAMTest     +CopyCharSet_AY
+
                     jsr UpdateTod1Display
-                    jsr Test_RamTest64k     ; does not do anything in Ultimax mode
-
-                    sed                     ; update COUNT
-                    lda #$01
-                    clc
-                    adc passCounterLo
-                    sta passCounterLo
-                    lda #$00
-                    adc passCounterHi
-                    sta passCounterHi
-                    cld
-
-                    +Flip_Cass_Port_A
+                    jsr Test_RunTestsFromRam
                     jmp MainTestLoop
 
 
@@ -295,7 +309,12 @@ BackFromRAMTest     jsr UpdateTod1Display
 ; NOTE! If this is called with Y>0, it's not using RTS to exit but JMP Test_RamTest_Return
 ;---------------------------------------------------------------------------------------------------------------------------
 
-SetupTextScreen     ldx #$00                ; clear screen following
+SetupTextScreen     tya
+                    tax
+                    +CopyCharSet_AY
+                    txa
+                    tay
+                    ldx #$00                ; clear screen following
 ClearScreen_1       lda #$20
                     sta $0400,x
                     sta $0500,x
@@ -319,7 +338,7 @@ OutText_Header      ldx #$27                ; 40 chars (header)
 
                     +CopyStr_AX strZeroPage, ScreenMemStart+ZPMsgOff, 9
                     +CopyStr_AX strColorRam, ScreenMemStart+ColMsgOff, 9
-                    +CopyStr_AX strRamTest, ScreenMemStart+RamMsgOff, 8
+                    +CopyStr_AX strRamTest, ScreenMemStart+RamMsgOff, 11
                     +CopyStr_AX strSoundTest, ScreenMemStart+SoundMsgOff, 10
                     
 OutText_Status      ldx #$00                ; output a string terminated by "FF"
@@ -741,240 +760,80 @@ Test_ColorRam_Err   eor ColorRamTP,x
                     +WriteStr_A ScreenMemStart, ColMsgOff+13, ColorTextBad, "bad"
                     jmp RamTest_Error_Bit_0
 
+
 ;---------------------------------------------------------------------------------------------------------------------------
-; RAM Test First 4 kByte
+; Copy relocatable tests to RAM
 ;---------------------------------------------------------------------------------------------------------------------------
 
-RamTestMsgScrStart  = 40
-RamTestLongMsgLen   = 66
-RamTestBegin        = RamTestMsgScrStart + RamTestLongMsgLen + 1
-
-; code from here is relocatable! Might get copied to low ram for 64k RAM test
-
-Test_RamTest_krnl   +CopyStr_AX strRamTest, RamTestMsgScrStart, RamTestLongMsgLen
-                    +CopyStr_AX strRamTest64k, RamTestMsgScrStart + 9, 3
-                    lda #($1000/$0800*2)    ; VIC-II sees CharROM at $1000
-                    sta $d018               ; show charset from ROM
-                    lda $01                 ; in KERNAL mode and in RAM: disable ROMs/IO
-                    and #$f8
-                    sta $01
-                    clc
-                    bcc +++
-
-Test_RamTest        +CopyStr_AX strRamTest, RamTestMsgScrStart, RamTestLongMsgLen
-                    +UltimaxMode_A
-                    bcc +
-                    lda #($3800/$0800*2)    ; VIC-II sees ROM $F000 at $3000
-                    bcs ++
-+                   lda #($1000/$0800*2)    ; VIC-II sees CharROM at $1000
-++                  sta $d018               ; show charset from ROM
-
-+++                 ldx #$00
-Test_RamTestStartPage1 = * + 1              ; for 64k test patching
-                    ldy #>RamTestBegin
-                    stx tmp1Ptr
-                    sty tmp1PtrHi
-                    ldx passCounterLo
-                    inx                     ; avoid seeding PRNG with 0
-                    txa
-                    +PRNG_Init
-Test_RamTestStartLo1 = * + 1                ; for 64k test patching
-                    ldy #<RamTestBegin
-Test_RamTest_2      ldx #$13
-Test_RamTest_3      lda TestPatterns,x
-                    sta (tmp1Ptr),y
-                    lda (tmp1Ptr),y
-                    eor TestPatterns,x
-                    beq +
-                    bne Test_RamTest_dbne   ; error
-+                   dex
-                    bpl Test_RamTest_3
-                    +PRNG_Generate
-                    sta (tmp1Ptr),y         ; store PRNG byte
-                    iny                     ; next address
-                    bne Test_RamTest_2
-                    inc tmp1PtrHi
-                    lda tmp1PtrHi
-Test_RamTestEndPage1 = * + 1                ; for 64k test patching
-                    cmp #$10
-                    bne Test_RamTest_2
-
-Test_RamTest_dbne   bne Test_RamTest_Error  ; double bne for "long" bne
-
-                    ; verify PRNG bytes
-                    ldx passCounterLo
-                    inx
-                    txa
-                    +PRNG_Init
-Test_RamTestStartPage2 = * + 1              ; for 64k test patching
-                    ldy #>RamTestBegin
-                    sty tmp1PtrHi
-                    ldy #$00
-                    sty tmp1Ptr
-Test_RamTestStartLo2 = * + 1                ; for 64k test patching
-                    ldy #<RamTestBegin
--                   +PRNG_Generate
-                    cmp (tmp1Ptr),y
-                    beq +
-                    lda #$00
-                    beq Test_RamTest_Error
-+                   iny
-                    bne -
-                    inc tmp1PtrHi
-                    lda tmp1PtrHi
-Test_RamTestEndPage2 = * + 1                ; for 64k test patching
-                    cmp #$10
-                    bne -
-                    beq Test_RamTest_Ok
-
-Test_RamTest_Error  tay
-                    lda $01
-                    ora #$07
-                    sta $01
-                    tya
-                    jmp Test_RamTest_BitErr
-
-Test_RamTest_Ok     ; all ok, fix memory clobbering
-                    lda $01
-                    ora #$07
-                    sta $01
-                    lda VicInit+$18
-                    sta $d018               ; switch VIC-II to RAM again
-                    +CopyCharSet_AY
-                    jsr SetupTextScreen
-
-                    lda #$0f                ; "O"
-                    sta ScreenMemStart+RamMsgOff+13
-                    sta ScreenMemStart+ZPMsgOff+13   ; oh well, just restore the ZP/Col "OK"s, too
-                    sta ScreenMemStart+ColMsgOff+13
-                    lda #$0b                ; "K"
-                    sta ScreenMemStart+RamMsgOff+14
-                    sta ScreenMemStart+ZPMsgOff+14
-                    sta ScreenMemStart+ColMsgOff+14
-                    lda ColorTextOk
-                    sta ColMemStart+RamMsgOff+13
-                    sta ColMemStart+ZPMsgOff+13
-                    sta ColMemStart+ColMsgOff+13
-                    sta ColMemStart+RamMsgOff+14
-                    sta ColMemStart+ZPMsgOff+14
-                    sta ColMemStart+ColMsgOff+14
-Test_RamTestReturn = *                      ; for 64k test patching (RTS instead of JMP)
-                    jmp BackFromRAMTest
-
-; code until here was relocatable
-Test_RamTest_relocatableEnd = *
-
-Test_RamTest_BitErr ; expects bit errors in A or zero on PRNG check error
-                    tax
-                    txs                     ; just use S as temp register, stack is unreliable anyways
-                    lda VicInit+$18
-                    sta $d018               ; switch VIC-II to RAM again
-                    +CopyCharSet_AY         ; do minimal screen fixes after clobbering
-                    ldy #$ff
-                    jmp SetupTextScreen     ; this will not use RTS because of Y>0
-Test_RamTest_Return tsx
-                    bne Test_RamTest_Biterr
-                    +WriteStr_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "adrfail"
-                    jmp LoopUntilDoomsday
-
-Test_RamTest_Biterr +WriteStr_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "bad"
-                    
-RamTest_Error_Bit_0 txa
-                    and #$01
-                    beq RamTest_Error_Bit_1
-                    +WriteStr_A ScreenMemStart, $02a4, ColorTextBad, "bad"
-RamTest_Error_Bit_1 txa
-                    and #$02
-                    beq RamTest_Error_Bit_2
-                    +WriteStr_A ScreenMemStart, $02a0, ColorTextBad, "bad"
-RamTest_Error_Bit_2 txa
-                    and #$04
-                    beq RamTest_Error_Bit_3
-                    +WriteStr_A ScreenMemStart, $029c, ColorTextBad, "bad"
-RamTest_Error_Bit_3 txa
-                    and #$08
-                    beq RamTest_Error_Bit_4
-                    +WriteStr_A ScreenMemStart, $0298, ColorTextBad, "bad"
-RamTest_Error_Bit_4 txa
-                    and #$10
-                    beq RamTest_Error_Bit_5
-                    +WriteStr_A ScreenMemStart, $0294, ColorTextBad, "bad"
-RamTest_Error_Bit_5 txa
-                    and #$20
-                    beq RamTest_Error_Bit_6
-                    +WriteStr_A ScreenMemStart, $0290, ColorTextBad, "bad"
-RamTest_Error_Bit_6 txa
-                    and #$40
-                    beq RamTest_Error_Bit_7
-                    +WriteStr_A ScreenMemStart, $028c, ColorTextBad, "bad"
-RamTest_Error_Bit_7 txa
-                    and #$80
-                    beq LoopUntilDoomsday
-                    +WriteStr_A ScreenMemStart, $0288, ColorTextBad, "bad"
-
-LoopUntilDoomsday   inc $d020
-                    jmp LoopUntilDoomsday   ; NO CARRIER
-
-
-Test_RamTest64k     +UltimaxMode_A
-                    bcs Test_RamTest64k_ex  ; in Ultimax mode, cannot test full RAM
-
-                    lda #<Test_RamTest_krnl ; copy RAM test to $0200
+Test_RunTestsFromRam
+                    lda #<RelocatableCodeStart ; copy tests to RAM
                     sta tmp1Ptr
-                    lda #>Test_RamTest_krnl
+                    lda #>RelocatableCodeStart
                     sta tmp1PtrHi
-                    lda #$02
-                    sta prngY
+                    lda #<TestsInRamStart
+                    sta tmp2Ptr
+                    lda #>TestsInRamStart
+                    sta tmp2PtrHi
                     ldy #$00
-                    sty prngX
 -                   lda (tmp1Ptr),y
-                    sta (prngX),y
+                    sta (tmp2Ptr),y
                     iny
                     bne -
                     inc tmp1PtrHi
-                    inc prngY
-                    lda #$08
-                    cmp prngY
+                    inc tmp2PtrHi
+                    lda #>TestsInRamEnd
+                    cmp tmp2PtrHi
                     bne -
 
-                    ; patch RamTest in RAM to test $0800 to $ffff and return using RTS
-                    lda #$08
-                    sta Test_RamTestStartPage1 - Test_RamTest_krnl + $0200
-                    sta Test_RamTestStartPage2 - Test_RamTest_krnl + $0200
+                    ; patch RamTest in RAM to test $1000 to $ffff and return using RTS
+                    lda #$10
+                    sta Test_RamTestStartPage1 - RelocatableCodeStart + TestsInRamStart
+                    sta Test_RamTestStartPage2 - RelocatableCodeStart + TestsInRamStart
                     lda #$00
-                    sta Test_RamTestEndPage1 - Test_RamTest_krnl + $0200
-                    sta Test_RamTestEndPage2 - Test_RamTest_krnl + $0200
-                    sta Test_RamTestStartLo1 - Test_RamTest_krnl + $0200
-                    sta Test_RamTestStartLo2 - Test_RamTest_krnl + $0200
+                    sta Test_RamTestEndPage1 - RelocatableCodeStart + TestsInRamStart
+                    sta Test_RamTestEndPage2 - RelocatableCodeStart + TestsInRamStart
+                    sta Test_RamTestStartLo1 - RelocatableCodeStart + TestsInRamStart
+                    sta Test_RamTestStartLo2 - RelocatableCodeStart + TestsInRamStart
+                    ; this variant of the RAM test tests from $1000 and does not
+                    ; clobber screen/stack so disable that part of the code
                     lda #$60  ; RTS
-                    sta Test_RamTestReturn - Test_RamTest_krnl + $0200
-                    jsr $0200
+                    sta Test_RamTestReturn - RelocatableCodeStart + TestsInRamStart
+                    lda #$2C  ; BIT $xxxx
+                    sta Test_RamTestScrn1 - RelocatableCodeStart + TestsInRamStart
+                    sta Test_RamTestScrn2 - RelocatableCodeStart + TestsInRamStart
+                    lda #80   ; move down 64k test result output by two lines
+                    sta Test_RamTest_scroff - RelocatableCodeStart + TestsInRamStart
 
-                    ; all okay here
-                    +CopyStr_AX strRamTest, ScreenMemStart + Ram64MsgOff, 8
-                    +CopyStr_AX strRamTest64k, ScreenMemStart + Ram64MsgOff + 9, 3
-                    lda #$0f                ; "O"
-                    sta ScreenMemStart+Ram64MsgOff+13
-                    lda #$0b                ; "K"
-                    sta ScreenMemStart+Ram64MsgOff+14
-                    lda ColorTextOk
-                    sta ColMemStart+Ram64MsgOff+13
-                    sta ColMemStart+Ram64MsgOff+14
-                    lda #$ff
-                    jsr SoundDelayLoop
-                    lda #$ff
-                    jsr SoundDelayLoop
-Test_RamTest64k_ex  rts
+                    +UltimaxMode_A
+                    bcc +
+                    lda #($3800/$0800*2 + $10)  ; VIC-II sees ROM $F000 at $3000 in Ultimax mode
+                    bcs ++
++                   lda #($0800/$0800*2 + $10)  ; use RAM charset in normal mode
+++                  sta $d018
+
+                    jsr TrampolineForRelocatableTests
+                    rts
+
+
+;---------------------------------------------------------------------------------------------------------------------------
+; START RELOCATABLE ROUTINES
+; These get copied to $0a00
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    * = RelocatableCodeStart
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Sound Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
+!pseudopc TestsInRamStart { ; This only ever gets executed after being copied to RAM so we can use pseudopc here
+
+SidRegOff = prngA
+
+SidDataWaves        !hex 11 25 45 81 00  ; note this must not cross a page boundary
 SidDataFreqs        !hex 14 00 25 11 9a 15 b1 19 4b 22 b1 19 9a 15 ff ; volume, regoff, (freqlo,freqhi)*x, endflag
                     !hex 18 07 4b 22 34 2b 61 33 95 44 61 33 34 2b ff
                     !hex 1f 0e 95 44 69 56 c2 66 2b 89 c2 66 69 56 00
-SidDataWaves        !hex 11 25 45 81 00
-SidRegOff = prngA
 
 Test_SoundTest      lda #31                 ; arrow left
                     sta ScreenMemStart+SoundMsgOff+13
@@ -984,7 +843,7 @@ Test_SoundTest      lda #31                 ; arrow left
 -                   sta $d400,y            ; init SID registers to 0
                     dey
                     bpl -
-                    
+
                     lda #$08               ; pulse width for all voices
                     sta $d403
                     sta $d40a
@@ -1024,6 +883,8 @@ Test_SoundNextNote  ldx SidRegOff
                     bne Test_SoundNextWave
                     lda #$00               ; shut down SID
                     sta $d418
+                    lda #32                ; space
+                    sta ScreenMemStart+SoundMsgOff+13
                     rts
 
 +                   cmp #$ff
@@ -1056,12 +917,8 @@ Test_SoundNextNote  ldx SidRegOff
                     bne Test_SoundNextNote ; unconditional jump
 
 
-;---------------------------------------------------------------------------------------------------------------------------
-; Delay Loop for Sounds
-; clobbers Y
-;---------------------------------------------------------------------------------------------------------------------------
-
-SoundDelayLoop      tay
+SoundDelayLoop      ; clobbers Y
+                    tay
                     txa
                     pha
                     tya
@@ -1074,7 +931,234 @@ SoundDelayLoop_2    dey
                     pla
                     tax
 SoundDelayLoopCpl   rts
-                    
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Relocatable code trampoline
+;---------------------------------------------------------------------------------------------------------------------------
+
+RamTest64kMsgLen = 63
+strRamTest64k       !scr "ram test 64k is running, screen will be restored in 45 seconds."
+
+TrampolineForRelocatableTests
+                    jsr Test_SoundTest
+
+                    +UltimaxMode_A
+                    bcc +
+                    jsr TrampolineNextPass
+                    rts                     ; in Ultimax mode, cannot run further test
+
+                    ; we can run RamTest in 64k mode!
++                   lda #($0800/$0800*2)    ; use charset from RAM (and screen at $0)
+                    sta $d018
+                    +CopyStr_AX strRamTest64k, RamTestMsgScrStart, RamTest64kMsgLen
+                    +CopyStr_AX strRamTest64k, ScreenMemStart + Ram64MsgOff, 12
+                    jsr Test_RamTest_64k - RelocatableCodeStart + TestsInRamStart
+
+                    ; all okay here
+                    +WriteStr_A ScreenMemStart, Ram64MsgOff+13, ColorTextOk, "ok"
+                    lda #$ff
+                    jsr SoundDelayLoop
+                    lda #$ff
+                    jsr SoundDelayLoop
+
+                    ; TODO actually update TOD/COUNT display in RAM mode
+                    jsr TrampolineNextPass
+
+                    sta $ffff
+                    sta $fffe
+                    lda $ffff
+                    cmp #>(ISR)
+                    bne +
+                    lda $fffe
+                    cmp #<(ISR)
+                    bne +
+                    rts                     ; our ROM is visible, return
++                   jmp TrampolineForRelocatableTests
+
+TrampolineNextPass
+                    sed                     ; increment COUNT
+                    lda #$01
+                    clc
+                    adc passCounterLo
+                    sta passCounterLo
+                    lda #$00
+                    adc passCounterHi
+                    sta passCounterHi
+                    cld
+                    +Flip_Cass_Port_A
+                    rts
+
+} ; end of pseudopc part
+
+;---------------------------------------------------------------------------------------------------------------------------
+; RAM Test
+; For the first 4 kBytes check, this runs from ROM
+; Gets copied to RAM (and patched) for 64k test in KERNAL/non-Ultimax mode
+; Stays in ROM for simple 4k check
+;---------------------------------------------------------------------------------------------------------------------------
+
+RamTestMsgScrStart  = 40
+RamTestLongMsgLen   = 66
+RamTestBegin        = RamTestMsgScrStart + RamTestLongMsgLen + 1
+
+Test_RamTest_64k    ; called when running from RAM
+                    lda $01                 ; disable ROMs/IO
+                    and #$f8
+                    sta $01
+
+Test_RamTest        ; called when running from ROM
+                    ldx #$00
+Test_RamTestStartPage1 = * + 1              ; for 64k test patching
+                    ldy #>RamTestBegin
+                    stx tmp1Ptr
+                    sty tmp1PtrHi
+                    ldx passCounterLo
+                    inx                     ; avoid seeding PRNG with 0
+                    txa
+                    +PRNG_Init
+Test_RamTestStartLo1 = * + 1                ; for 64k test patching
+                    ldy #<RamTestBegin
+Test_RamTest_2      ldx #$13
+Test_RamTest_3      lda TestPatterns,x
+                    sta (tmp1Ptr),y
+                    lda (tmp1Ptr),y
+                    eor TestPatterns,x
+                    beq +
+                    bne Test_RamTest_dbne   ; error
++                   dex
+                    bpl Test_RamTest_3
+                    +PRNG_Generate
+                    sta (tmp1Ptr),y         ; store PRNG byte
+                    iny                     ; next address
+                    bne Test_RamTest_2
+                    inc tmp1PtrHi
+                    lda tmp1PtrHi
+Test_RamTestEndPage1 = * + 1                ; for 64k test patching
+                    cmp #>($1000)           ; in 4k test, ends at $1000
+                    bne Test_RamTest_2
+
+Test_RamTest_dbne   bne Test_RamTest_Error  ; double bne for "long" bne
+
+                    ; verify PRNG bytes
+                    ldx passCounterLo
+                    inx
+                    txa
+                    +PRNG_Init
+Test_RamTestStartPage2 = * + 1              ; for 64k test patching
+                    ldy #>RamTestBegin
+                    sty tmp1PtrHi
+                    ldy #$00
+                    sty tmp1Ptr
+Test_RamTestStartLo2 = * + 1                ; for 64k test patching
+                    ldy #<RamTestBegin
+-                   +PRNG_Generate
+                    cmp (tmp1Ptr),y
+                    beq +
+                    lda #$00
+                    beq Test_RamTest_Error
++                   iny
+                    bne -
+                    inc tmp1PtrHi
+                    lda tmp1PtrHi
+Test_RamTestEndPage2 = * + 1                ; for 64k test patching
+                    cmp #>($1000)           ; in 4k test, ends at $1000
+                    bne -
+                    beq Test_RamTest_Ok
+
+Test_RamTest_Error  tay
+                    lda $01
+                    ora #$07
+                    sta $01
+                    tya
+                    clc
+                    bcc Test_RamTest_BitErr
+
+Test_RamTest_Ok     ; all ok, reset memory layout and jump back
+                    lda $01
+                    ora #$07
+                    sta $01
+Test_RamTestScrn1 = *                       ; for RAM only test patching (BIT instead of JSR)
+                    jsr SetupTextScreen
+                    lda VicInit+$18
+                    sta $d018               ; switch VIC-II to RAM again
+                    lda #$0f                ; "O"
+                    sta ScreenMemStart+RamMsgOff+13
+                    sta ScreenMemStart+ZPMsgOff+13   ; oh well, just restore the ZP/Col "OK"s, too
+                    sta ScreenMemStart+ColMsgOff+13
+                    lda #$0b                ; "K"
+                    sta ScreenMemStart+RamMsgOff+14
+                    sta ScreenMemStart+ZPMsgOff+14
+                    sta ScreenMemStart+ColMsgOff+14
+                    lda ColorTextOk
+                    sta ColMemStart+RamMsgOff+13
+                    sta ColMemStart+ZPMsgOff+13
+                    sta ColMemStart+ColMsgOff+13
+                    sta ColMemStart+RamMsgOff+14
+                    sta ColMemStart+ZPMsgOff+14
+                    sta ColMemStart+ColMsgOff+14
+Test_RamTestReturn = *                      ; for 64k test patching (RTS instead of JMP)
+                    jmp BackFromRAMTest
+
+Test_RamTest_BitErr ; expects bit errors in A or zero on PRNG check error
+                    tax
+                    txs                     ; just use S as temp register, stack is unreliable anyways
+                    lda VicInit+$18
+                    sta $d018               ; switch VIC-II to RAM again
+                    ldy #$ff
+Test_RamTestScrn2 = *                       ; for RAM only test patching (BIT instead of JMP)
+                    jmp SetupTextScreen     ; this will not use RTS because of Y>0
+Test_RamTest_Return
+Test_RamTest_scroff = * + 1                 ; for RAM only test patching (80 chars display offset)
+                    ldy #$00
+                    tsx
+                    bne +
+                    +WriteStrYOff_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "adrfail"
+                    clc
+                    bcc RamTest_Error_Bit_0
++                   +WriteStrYOff_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "bad"
+RamTest_Error_Bit_0 txa
+                    and #$01
+                    beq RamTest_Error_Bit_1
+                    +WriteStr_A ScreenMemStart, $02a4, ColorTextBad, "bad"
+RamTest_Error_Bit_1 txa
+                    and #$02
+                    beq RamTest_Error_Bit_2
+                    +WriteStr_A ScreenMemStart, $02a0, ColorTextBad, "bad"
+RamTest_Error_Bit_2 txa
+                    and #$04
+                    beq RamTest_Error_Bit_3
+                    +WriteStr_A ScreenMemStart, $029c, ColorTextBad, "bad"
+RamTest_Error_Bit_3 txa
+                    and #$08
+                    beq RamTest_Error_Bit_4
+                    +WriteStr_A ScreenMemStart, $0298, ColorTextBad, "bad"
+RamTest_Error_Bit_4 txa
+                    and #$10
+                    beq RamTest_Error_Bit_5
+                    +WriteStr_A ScreenMemStart, $0294, ColorTextBad, "bad"
+RamTest_Error_Bit_5 txa
+                    and #$20
+                    beq RamTest_Error_Bit_6
+                    +WriteStr_A ScreenMemStart, $0290, ColorTextBad, "bad"
+RamTest_Error_Bit_6 txa
+                    and #$40
+                    beq RamTest_Error_Bit_7
+                    +WriteStr_A ScreenMemStart, $028c, ColorTextBad, "bad"
+RamTest_Error_Bit_7 txa
+                    and #$80
+                    beq LoopUntilDoomsday
+                    +WriteStr_A ScreenMemStart, $0288, ColorTextBad, "bad"
+
+LoopUntilDoomsday   inc $d020
+                    clc
+                    bcc LoopUntilDoomsday   ; NO CARRIER
+
+;---------------------------------------------------------------------------------------------------------------------------
+; END RELOCATABLE ROUTINES
+;---------------------------------------------------------------------------------------------------------------------------
+
+                    * = $f000
+
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Update TOD1 display
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -1210,7 +1294,6 @@ strCount            !scr "count"                                    ;  5 chars f
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
 strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
-strRamTest64k       !scr "64k"
 strSoundTest        !scr "sound test"                               ; 10 chars fixed text
 
 ;---------------------------------------------------------------------------------------------------------------------------
