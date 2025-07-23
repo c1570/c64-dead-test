@@ -8,6 +8,7 @@
 ;---------------------------------------------------------------------------------------------------------------------------
 
                     !to "dead_test.bin", plain
+                    !convtab scr
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ;
@@ -166,6 +167,18 @@ Ram64MsgOff = 240
                     sta .destPtr,x
                     dex
                     bpl -
+}
+
+!macro WriteStr_A .screenStart, .offset, .color, @str {
+                    @length = len(@str)
+                    !for @index, 0, @length - 1 {
+                      lda #@str[@index]
+                      sta .screenStart + .offset + @index
+                    }
+                    lda .color
+                    !for @index, 0, @length - 1 {
+                      sta ColMemStart + .offset + @index
+                    }
 }
 
 !macro UltimaxMode_A { ; sets carry if in ultimax mode, clobbers A (and $bfff/$bffe)
@@ -677,26 +690,11 @@ Le307               lda TestPatterns,x
                     iny
                     bne -
 
-                    lda #$0f                ; "O"
-                    sta ScreenMemStart+ZPMsgOff+13
-                    lda #$0b                ; "K"
-                    sta ScreenMemStart+ZPMsgOff+14
-                    lda ColorTextOk
-                    sta ColMemStart+ZPMsgOff+13
-                    sta ColMemStart+ZPMsgOff+14
+                    +WriteStr_A ScreenMemStart, ZPMsgOff+13, ColorTextOk, "ok"
                     rts
 
 ZP_Error            tax
-                    lda #$02                ; "B"
-                    sta ScreenMemStart+ZPMsgOff+13
-                    lda #$01                ; "A"
-                    sta ScreenMemStart+ZPMsgOff+14
-                    lda #$04                ; "D"
-                    sta ScreenMemStart+ZPMsgOff+15
-                    lda ColorTextBad
-                    sta ColMemStart+ZPMsgOff+13
-                    sta ColMemStart+ZPMsgOff+14
-                    sta ColMemStart+ZPMsgOff+15
+                    +WriteStr_A ScreenMemStart, ZPMsgOff+13, ColorTextBad, "bad"
                     jmp RamTest_Error_Bit_0
                     
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -735,27 +733,12 @@ Le42a               dex
 Le443               lda tmp1PtrHi
                     cmp #$dc
                     bne Le41b
-                    lda #$0f                ; "O"
-                    sta ScreenMemStart+ColMsgOff+13
-                    lda #$0b                ; "K"
-                    sta ScreenMemStart+ColMsgOff+14
-                    lda ColorTextOk
-                    sta ColMemStart+ColMsgOff+13
-                    sta ColMemStart+ColMsgOff+14
+                    +WriteStr_A ScreenMemStart, ColMsgOff+13, ColorTextOk, "ok"
                     rts
                     
 Test_ColorRam_Err   eor ColorRamTP,x
                     tax
-                    lda #$02                ; "B"
-                    sta ScreenMemStart+ColMsgOff+13
-                    lda #$01                ; "A"
-                    sta ScreenMemStart+ColMsgOff+14
-                    lda #$04                ; "D"
-                    sta ScreenMemStart+ColMsgOff+15
-                    lda ColorTextBad
-                    sta ColMemStart+ColMsgOff+13
-                    sta ColMemStart+ColMsgOff+14
-                    sta ColMemStart+ColMsgOff+15
+                    +WriteStr_A ScreenMemStart, ColMsgOff+13, ColorTextBad, "bad"
                     jmp RamTest_Error_Bit_0
 
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -891,145 +874,43 @@ Test_RamTest_BitErr ; expects bit errors in A or zero on PRNG check error
                     jmp SetupTextScreen     ; this will not use RTS because of Y>0
 Test_RamTest_Return tsx
                     bne Test_RamTest_Biterr
-                    lda #$01                ; "A"
-                    sta ScreenMemStart+RamMsgOff+13
-                    lda #$04                ; "D"
-                    sta ScreenMemStart+RamMsgOff+14
-                    lda #$12                ; "R"
-                    sta ScreenMemStart+RamMsgOff+15
-                    lda #$06                ; "F"
-                    sta ScreenMemStart+RamMsgOff+16
-                    lda #$01                ; "A"
-                    sta ScreenMemStart+RamMsgOff+17
-                    lda #$09                ; "I"
-                    sta ScreenMemStart+RamMsgOff+18
-                    lda #$0c                ; "L"
-                    sta ScreenMemStart+RamMsgOff+19
-                    lda ColorTextBad
-                    sta ColMemStart+RamMsgOff+13
-                    sta ColMemStart+RamMsgOff+14
-                    sta ColMemStart+RamMsgOff+15
-                    sta ColMemStart+RamMsgOff+16
-                    sta ColMemStart+RamMsgOff+17
-                    sta ColMemStart+RamMsgOff+18
-                    sta ColMemStart+RamMsgOff+19
+                    +WriteStr_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "adrfail"
                     jmp LoopUntilDoomsday
 
-Test_RamTest_Biterr lda #$02                ; "B"
-                    sta ScreenMemStart+RamMsgOff+13
-                    lda #$01                ; "A"
-                    sta ScreenMemStart+RamMsgOff+14
-                    lda #$04                ; "D"
-                    sta ScreenMemStart+RamMsgOff+15
-                    lda ColorTextBad
-                    sta ColMemStart+RamMsgOff+13
-                    sta ColMemStart+RamMsgOff+14
-                    sta ColMemStart+RamMsgOff+15
+Test_RamTest_Biterr +WriteStr_A ScreenMemStart, RamMsgOff+13, ColorTextBad, "bad"
                     
 RamTest_Error_Bit_0 txa
                     and #$01
                     beq RamTest_Error_Bit_1
-                    lda #$02                ; "B"
-                    sta $06a4
-                    lda #$01                ; "A"
-                    sta $06a5
-                    lda #$04                ; "D"
-                    sta $06a6
-                    lda ColorTextBad
-                    sta $daa4
-                    sta $daa5
-                    sta $daa6
+                    +WriteStr_A ScreenMemStart, $02a4, ColorTextBad, "bad"
 RamTest_Error_Bit_1 txa
                     and #$02
                     beq RamTest_Error_Bit_2
-                    lda #$02                ; "B"
-                    sta $06a0
-                    lda #$01                ; "A"
-                    sta $06a1
-                    lda #$04                ; "D"
-                    sta $06a2
-                    lda ColorTextBad
-                    sta $daa0
-                    sta $daa1
-                    sta $daa2
+                    +WriteStr_A ScreenMemStart, $02a0, ColorTextBad, "bad"
 RamTest_Error_Bit_2 txa
                     and #$04
                     beq RamTest_Error_Bit_3
-                    lda #$02                ; "B"
-                    sta $069c
-                    lda #$01                ; "A"
-                    sta $069d
-                    lda #$04                ; "D"
-                    sta $069e
-                    lda ColorTextBad
-                    sta $da9c
-                    sta $da9d
-                    sta $da9e
+                    +WriteStr_A ScreenMemStart, $029c, ColorTextBad, "bad"
 RamTest_Error_Bit_3 txa
                     and #$08
                     beq RamTest_Error_Bit_4
-                    lda #$02                ; "B"
-                    sta $0698
-                    lda #$01                ; "A"
-                    sta $0699
-                    lda #$04                ; "D"
-                    sta $069a
-                    lda ColorTextBad
-                    sta $da98
-                    sta $da99
-                    sta $da9a
+                    +WriteStr_A ScreenMemStart, $0298, ColorTextBad, "bad"
 RamTest_Error_Bit_4 txa
                     and #$10
                     beq RamTest_Error_Bit_5
-                    lda #$02                ; "B"
-                    sta $0694
-                    lda #$01                ; "A"
-                    sta $0695
-                    lda #$04                ; "D"
-                    sta $0696
-                    lda ColorTextBad
-                    sta $da94
-                    sta $da95
-                    sta $da96
+                    +WriteStr_A ScreenMemStart, $0294, ColorTextBad, "bad"
 RamTest_Error_Bit_5 txa
                     and #$20
                     beq RamTest_Error_Bit_6
-                    lda #$02                ; "B"
-                    sta $0690
-                    lda #$01                ; "A"
-                    sta $0691
-                    lda #$04                ; "D"
-                    sta $0692
-                    lda ColorTextBad
-                    sta $da90
-                    sta $da91
-                    sta $da92
+                    +WriteStr_A ScreenMemStart, $0290, ColorTextBad, "bad"
 RamTest_Error_Bit_6 txa
                     and #$40
                     beq RamTest_Error_Bit_7
-                    lda #$02                ; "B"
-                    sta $068c
-                    lda #$01                ; "A"
-                    sta $068d
-                    lda #$04                ; "D"
-                    sta $068e
-                    lda ColorTextBad
-                    sta $da8c
-                    sta $da8d
-                    sta $da8e
+                    +WriteStr_A ScreenMemStart, $028c, ColorTextBad, "bad"
 RamTest_Error_Bit_7 txa
                     and #$80
                     beq LoopUntilDoomsday
-                    lda #$02                ; "B"
-                    sta $0688
-                    lda #$01                ; "A"
-                    sta $0689
-                    lda #$04                ; "D"
-                    sta $068a
-                    lda ColorTextBad
-                    sta $da88
-                    sta $da89
-                    sta $da8a
+                    +WriteStr_A ScreenMemStart, $0288, ColorTextBad, "bad"
 
 LoopUntilDoomsday   inc $d020
                     jmp LoopUntilDoomsday   ; NO CARRIER
