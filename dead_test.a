@@ -403,7 +403,7 @@ IntegrityError      ldx #15
 InitialRamTest      ldx #$15                ; 22 test patterns
                     ldy #$00
 NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
-                    sta $0100,y             ; write to RAM pages
+-                   sta $0100,y             ; write to RAM pages
                     sta $0200,y
                     sta $0300,y
                     sta $0400,y
@@ -419,7 +419,7 @@ NextTestPattern     lda TestPatterns,x      ; fetch test TestPattern no. x
                     sta $0e00,y
                     sta $0f00,y
                     iny
-                    bne NextTestPattern     ; loop on
+                    bne -
 
                     dec $d020               ; activity control
                     +Flip_Cass_Port_A
@@ -499,6 +499,14 @@ Thorough512Test     ldx #$00                ; do a slightly more thorough check 
                     inx
                     iny
                     bne -
+
+                    sty $0202               ; write invalid data to untested area:
+                    sty $0402               ; should find stuck address lines
+                    sty $0802
+                    sty $1002
+                    sty $2002
+                    sty $4002
+                    sty $8002
 
                     ldy #$02
                     inx                     ; roll over X to its initial value
