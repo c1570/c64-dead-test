@@ -40,6 +40,22 @@ If used as KERNAL ROM, after the sound check, another RAM test pass up to the fu
 During RAM tests, the charset from the CHARROM will be enabled.
 If you get broken characters during the KERNAL mode RAM check, your CHARROM is broken, missing, or the PLA does not enable it properly.
 
+## ROM CRC
+```
+0493 kernal-906145-02
+1a9d chargen-901225-01
+20dc chargen-906143-02
+22ef JiffyDOS V6.01 SX64
+2f69 kernal-901227-01
+6a8d basic-901226-01
+8271 kernal-251104-04
+9fcd kernal-901246-01
+bccf kernal-901227-02
+c2bc JiffyDOS V6.01 C64
+cc25 kernal-390852-01
+ffd0 kernal-901227-03
+```
+
 ## Historical info
 
 For the original 781220 manual, search "781220 manual" on the net.

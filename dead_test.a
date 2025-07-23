@@ -77,15 +77,23 @@ passCounterLo  = $02
 passCounterHi  = passCounterLo + 1
 tmp1Ptr        = passCounterHi + 1
 tmp1PtrHi      = tmp1Ptr + 1
+
 tmp2Ptr        = tmp1PtrHi + 1    ; don't use along with prng
 tmp2PtrHi      = tmp2Ptr + 1
-prngX          = tmp1PtrHi + 1
-prngY          = prngX + 1
+prngX          = tmp2Ptr
+prngY          = tmp2PtrHi
+
 prngZ          = prngY + 1
 prngA          = prngZ + 1
 prngT          = prngA + 1
 
 firstUnusedZP  = prngT + 1
+
+crclo    = $7000         ; Two 256-byte tables for quick lookup
+crchi    = crclo + $0100
+crc_tmp  = prngZ
+crc      = prngA         ; current CRC
+crc2     = crc + 1
 
 CharSetInRamStart    = $0800  ; charset uses 512 bytes
 TestsInRamStart      = $0a00  ; Location to copy tests running from RAM to
@@ -223,6 +231,16 @@ Ram64MsgOff = 240
                     sta $01
                     sec
 +
+}
+
+!macro CRCUpdate_X { ; Quick CRC computation with lookup tables, clobbers X
+         eor crc+1
+         tax
+         lda crc
+         eor crchi,x
+         sta crc+1
+         lda crclo,x
+         sta crc
 }
 
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -938,6 +956,9 @@ SoundDelayLoopCpl   rts
 
 RamTest64kMsgLen = 63
 strRamTest64k       !scr "ram test 64k is running, screen will be restored in 45 seconds."
+strCrcBasic         !scr "basic crc"
+strCrcKernal        !scr "kernal crc"
+strCrcCharset       !scr "charrom crc"
 
 TrampolineForRelocatableTests
                     jsr Test_SoundTest
@@ -953,9 +974,11 @@ TrampolineForRelocatableTests
                     +CopyStr_AX strRamTest64k, RamTestMsgScrStart, RamTest64kMsgLen
                     +CopyStr_AX strRamTest64k, ScreenMemStart + Ram64MsgOff, 12
                     jsr Test_RamTest_64k - RelocatableCodeStart + TestsInRamStart
-
-                    ; all okay here
+                    ; RAM is okay
                     +WriteStr_A ScreenMemStart, Ram64MsgOff+13, ColorTextOk, "ok"
+
+                    jsr Test_CRCTest
+
                     lda #$ff
                     jsr SoundDelayLoop
                     lda #$ff
@@ -987,6 +1010,126 @@ TrampolineNextPass
                     cld
                     +Flip_Cass_Port_A
                     rts
+
+;---------------------------------------------------------------------------------------------------------------------------
+; CRC Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+CRCAreas            !8 $a0, $c0, 40+13, $e0, $00, 80+13, $d0, $e0, 120+13, 0  ; startpage,endpage,screenOffset
+
+Test_CRCTest        +CopyStr_AX strCrcBasic, ScreenMemStart + Ram64MsgOff + 40, 9
+                    +CopyStr_AX strCrcKernal, ScreenMemStart + Ram64MsgOff + 80, 10
+                    +CopyStr_AX strCrcCharset, ScreenMemStart + Ram64MsgOff + 120, 11
+                    jsr CRC_MakeTable
+
+                    lda #<(ScreenMemStart + Ram64MsgOff)
+                    sta tmp1Ptr
+                    lda #>(ScreenMemStart + Ram64MsgOff)
+                    sta tmp1PtrHi
+
+                    lda #$33
+                    sta $01
+                    ldx #$00
+-                   lda CRCAreas,x
+                    bne +
+                    lda #$37
+                    sta $01
+                    rts
++                   sta CRCStartPage
+                    inx
+                    lda CRCAreas,x
+                    inx
+                    stx crc_tmp
+                    sta CRCEndPage
+                    jsr Calc_CRC_AXY
+                    ldx crc_tmp
+                    ldy CRCAreas,x
+                    jsr CRC_Out
+                    ldx crc_tmp
+                    inx
+                    bne -
+
+Calc_CRC_AXY        ; calculates CRC from CRCStartPage to EndPage, clobbers A, X, Y
+                    jsr CRC_Init
+                    ldy #$00
+CRCStartPage = * + 2
+-                   lda $0000,y
+                    +CRCUpdate_X
+                    iny
+                    bne -
+                    inc CRCStartPage
+                    lda CRCStartPage
+CRCEndPage = * + 1
+                    cmp #$00
+                    bne -
+                    rts
+
+HexTab              !scr "0123456789abcdef"
+
+CRC_Out             lda crc+1
+                    ror
+                    ror
+                    ror
+                    ror
+                    and #$0f
+                    tax
+                    lda HexTab,x
+                    sta (tmp1Ptr),y
+                    lda crc+1
+                    and #$0f
+                    tax
+                    lda HexTab,x
+                    iny
+                    sta (tmp1Ptr),y
+                    lda crc
+                    ror
+                    ror
+                    ror
+                    ror
+                    and #$0f
+                    tax
+                    lda HexTab,x
+                    iny
+                    sta (tmp1Ptr),y
+                    lda crc
+                    and #$0f
+                    tax
+                    lda HexTab,x
+                    iny
+                    sta (tmp1Ptr),y
+                    rts
+
+; CRC16 routines
+; By Paul Guertin (pg@sff.net), 18 August 2000
+
+CRC_MakeTable:
+         ldx #0          ; X counts from 0 to 255
+--       lda #0          ; A contains the low 8 bits of the CRC-16
+         stx crc         ; and CRC contains the high 8 bits
+         ldy #8          ; Y counts bits in a byte
+-        asl
+         rol crc         ; Shift CRC left
+         bcc +           ; Do nothing if no overflow
+         eor #$21        ; else add CRC-16 polynomial $1021
+         pha             ; Save low byte
+         lda crc         ; Do high byte
+         eor #$10
+         sta crc
+         pla             ; Restore low byte
++        dey
+         bne -           ; Do next bit
+         sta crclo,x     ; Save CRC into table, low byte
+         lda crc         ; then high byte
+         sta crchi,x
+         inx
+         bne --          ; Do next byte
+         rts
+
+CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT standard
+         lda #$00
+         sta crc
+         sta crc+1
+         rts
 
 } ; end of pseudopc part
 
