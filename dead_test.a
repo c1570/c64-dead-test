@@ -1527,7 +1527,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250722" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250724" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text

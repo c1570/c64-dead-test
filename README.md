@@ -5,7 +5,7 @@ The C64 "Dead Test 781220" ROM with lots of improvements and much better RAM che
 This version checks stack and screen RAM during the normal RAM test.
 
 In Ultimax cartridge mode, it can only check the first 4KBytes of RAM.
-If used as KERNAL ROM, it checks the full 64KBytes.
+If used as KERNAL ROM or if removing the GAME jumper during sound check, it checks the full 64KBytes.
 
 Version 002 to 006 modifications by Kinzi.
 
@@ -25,6 +25,7 @@ In short, on power up, the cartridge will...
 5. after that, the text screen will be shown, running more tests in an infinite loop
    - during the RAM test, screen output will be (mostly) random text (VIC-II screen mem set to $0000, charset to cartridge ROM $F800; otherwise screen mem $0400 and charset RAM $0800)
    - sound will play about 40 seconds after initial power on
+   - **during sound check, remove the GAME jumper** from the cartridge to have it run additional checks (see "RAM mode" below)
    - each loop of step 5 takes about 40 seconds
    - during the RAM test, in case the "ram test is running, screen will be restored in a few seconds" message/charset is garbled, the VIC-II cannot access ROM properly (check U26 and surrounding PCB traces or PLA)
    - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 4
@@ -39,8 +40,25 @@ Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k
 If used as KERNAL ROM, after the sound check, another RAM test pass up to the full 64KBytes is done.
 During RAM tests, the charset from the CHARROM will be enabled.
 If you get broken characters during the KERNAL mode RAM check, your CHARROM is broken, missing, or the PLA does not enable it properly.
+Additional checks (see below) run as well.
+
+## RAM mode
+RAM mode is triggered by removing the cartridge's GAME jumper while the sound check is running.
+This mode is similar to KERNAL ROM mode but cannot loop back to the zeropage and screen memory checks.
+It does run the checks below though.
+
+## CIA1 check
+This checks whether CIA1 timer A works as required by BASIC V2 (i.e., it runs and triggers).
+No thorough checking of CIA1 is done.
+
+## Keyboard check
+While the keyboard check is running, press some keys, or move the joystick.
+For example, `0******* *******0` means the key at position PA7/PB0 has been pressed (see [keyboard matrix](https://www.c64-wiki.com/wiki/Keyboard#Keyboard_Matrix): it's the `1` key).
+If this does not work, CIA1 (or PCB traces, or PLA) are broken.
 
 ## ROM CRC
+Compare the CRCs displayed against this list.
+If the CRCs displayed are not stable between test runs, there is definitely a problem.
 ```
 0493 kernal-906145-02
 1a9d chargen-901225-01
