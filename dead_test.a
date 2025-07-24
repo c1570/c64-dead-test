@@ -979,6 +979,8 @@ TrampolineForRelocatableTests
 
                     jsr Test_CRCTest
 
+                    jsr Test_KeyboardTest
+
                     lda #$ff
                     jsr SoundDelayLoop
                     lda #$ff
@@ -1130,6 +1132,57 @@ CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT standard
          sta crc
          sta crc+1
          rts
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Keyboard Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+strKeyboardTest     !scr "keyboard"
+KeyboardMsgOff = Ram64MsgOff + 160
+
+Test_KeyboardTest   +CopyStr_AX strKeyboardTest, ScreenMemStart + KeyboardMsgOff, 8
+                    lda #$01
+                    sta ColMemStart + KeyboardMsgOff + 21   ; hide 9th digit
+                    sta ColMemStart + KeyboardMsgOff + 30
+                    ldx #$ff
+                    stx $dc03               ; port B output
+                    inx
+                    stx $dc01               ; port B all low
+                    stx $dc00
+                    stx $dc02
+                    lda $dc00
+                    ldy #13
+                    jsr Test_KeyboardPrint
+                    stx $dc03               ; port B input
+                    dex
+                    stx $dc02               ; port A output, all low
+                    ldy #$40
+-                   dex
+                    bne -
+                    dey
+                    bne -
+                    inc Test_KeyCounter
+                    lda $dc01
+                    ldy #22
+                    jsr Test_KeyboardPrint
+Test_KeyCounter = * + 1
+                    lda #$00
+                    bne Test_KeyboardTest
+                    rts
+
+Test_KeyboardPrint  sec
+-                   rol
+                    pha
+                    bcc +
+                    lda #42                 ; "*"
+                    bcs ++
++                   lda #48                 ; "0"
+++                  sta ScreenMemStart + KeyboardMsgOff,y
+                    iny
+                    pla
+                    clc
+                    bne -
+                    rts
 
 } ; end of pseudopc part
 
