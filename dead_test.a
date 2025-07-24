@@ -106,8 +106,9 @@ ColMemStart = $d800
 ZPMsgOff = 80
 ColMsgOff = 120
 RamMsgOff = 160
-SoundMsgOff = 200
-Ram64MsgOff = 240
+Cia1MsgOff = 200
+SoundMsgOff = 240
+Ram64MsgOff = 280
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; PRNG routine
@@ -272,19 +273,19 @@ Reset_Handler       sei
 MainTestStart       +Flip_Cass_Port_A
 
 CiaRegInit1         ldx #$04
-CiaRegInit1_1       lda Cia1Init,x          ; CIA init
+CiaRegInit1_1       lda Cia1Init,x          ; CIA TOD init
                     sta $dc07,x
                     lda Cia2Init,x
                     sta $dd07,x
                     dex
                     bne CiaRegInit1_1
 
-CiaRegInit2         lda #$08                ; CIA init part 2
+CiaRegInit2         lda #$08                ; CIA Timer B Control: Oneshot mode
                     sta $dc0f
                     sta $dd0f
-                    lda #$48
+                    lda #$48                ; CIA1 Timer A Control: Oneshot mode, SP is output
                     sta $dc0e
-                    lda #$08
+                    lda #$08                ; CIA2 Timer A Control: Oneshot mode
                     sta $dd0e
 
                     ldx #$00
@@ -318,6 +319,7 @@ MainTestLoop        ldx #$2f                ; VIC register init
 BackFromRAMTest     +CopyCharSet_AY
 
                     jsr UpdateTod1Display
+                    jsr Test_Cia1Test
                     jsr Test_RunTestsFromRam
                     jmp MainTestLoop
 
@@ -357,6 +359,7 @@ OutText_Header      ldx #$27                ; 40 chars (header)
                     +CopyStr_AX strZeroPage, ScreenMemStart+ZPMsgOff, 9
                     +CopyStr_AX strColorRam, ScreenMemStart+ColMsgOff, 9
                     +CopyStr_AX strRamTest, ScreenMemStart+RamMsgOff, 11
+                    +CopyStr_AX strCia1Test, ScreenMemStart+Cia1MsgOff, 10
                     +CopyStr_AX strSoundTest, ScreenMemStart+SoundMsgOff, 10
                     
 OutText_Status      ldx #$00                ; output a string terminated by "FF"
@@ -778,6 +781,35 @@ Test_ColorRam_Err   eor ColorRamTP,x
                     +WriteStr_A ScreenMemStart, ColMsgOff+13, ColorTextBad, "bad"
                     jmp RamTest_Error_Bit_0
 
+
+;---------------------------------------------------------------------------------------------------------------------------
+; CIA1 Timer Interrupt Test
+;---------------------------------------------------------------------------------------------------------------------------
+
+Test_Cia1Test       lda #$00
+                    sta $dc0e                  ; stop Timer A
+                    lda #$7f
+                    sta $dc0d                  ; don't actually trigger any IRQ
+                    lda $dc0d                  ; clear Int Data
+                    lda #$05
+                    sta $dc04                  ; CIA1 Timer A Low
+                    lda #$00
+                    sta $dc05                  ; CIA1 Timer A High
+                    lda $dc0d
+                    and #$01
+                    bne CIA1Fail
+                    lda #$01
+                    sta $dc0e                  ; start Timer A
+                    lda $dc0d
+                    and #$01
+                    bne CIA1Fail               ; shouldn't have triggered yet
+                    lda $dc0d
+                    and #$01
+                    beq CIA1Fail               ; but NOW it should have triggered
+                    +WriteStr_A ScreenMemStart, Cia1MsgOff+13, ColorTextOk, "ok"
+                    rts
+CIA1Fail:           +WriteStr_A ScreenMemStart, Cia1MsgOff+13, ColorTextBad, "bad"
+                    rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Copy relocatable tests to RAM
@@ -1500,6 +1532,7 @@ strCount            !scr "count"                                    ;  5 chars f
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
 strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
+strCia1Test         !scr "cia1 check"                               ; 10 chars fixed text
 strSoundTest        !scr "sound test"                               ; 10 chars fixed text
 
 ;---------------------------------------------------------------------------------------------------------------------------
