@@ -981,13 +981,18 @@ TrampolineForRelocatableTests
 
                     jsr Test_KeyboardTest
 
-                    lda #$ff
-                    jsr SoundDelayLoop
-                    lda #$ff
-                    jsr SoundDelayLoop
-
-                    ; TODO actually update TOD/COUNT display in RAM mode
                     jsr TrampolineNextPass
+
+                    lda #>($07c6)           ; just reuse the CRC16 output for COUNT
+                    sta tmp1PtrHi
+                    lda #<($07c6)
+                    sta tmp1Ptr
+                    lda passCounterLo
+                    sta crc
+                    lda passCounterHi
+                    sta crc+1
+                    ldy #$00
+                    jsr CRC_Out
 
                     sta $ffff
                     sta $fffe
@@ -998,7 +1003,12 @@ TrampolineForRelocatableTests
                     cmp #<(ISR)
                     bne +
                     rts                     ; our ROM is visible, return
-+                   jmp TrampolineForRelocatableTests
++                   ldy #30                 ; dead test ROM not available:
+                    lda #32                 ; delete TOD output as we don't update it
+-                   sta ScreenMemStart + 1000 - 30, y
+                    dey
+                    bpl -
+                    jmp TrampolineForRelocatableTests
 
 TrampolineNextPass
                     sed                     ; increment COUNT
