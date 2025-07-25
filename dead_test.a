@@ -16,9 +16,9 @@
 ;
 ; $0400..$07FF = screen RAM
 ; $0800..$09FF = char set in RAM
-; $0A00..$0FFF = Sound test and RAM 64k test (RAM 64k test is only run in RAM/KERNAL mode)
+; $0A00..$0FFF = Sound/RAM 64k/Keyboard/ROM CRC code (additional tests are run only in RAM/KERNAL mode)
 ; $D800..$DBFF = color RAM
-; $DC00..$DFFF = I/O
+; $D000..$DFFF = I/O
 ; $F800..$F9FF = char set in ROM
 ;
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -110,6 +110,12 @@ Cia1MsgOff = 200
 SoundMsgOff = 240
 Ram64MsgOff = 280
 
+RamTestMsgScrStart  = 40
+RamTestLongMsgLen   = 66
+
+ColorTextOk         = 5       ; green
+ColorTextBad        = 2       ; red
+
 ;---------------------------------------------------------------------------------------------------------------------------
 ; PRNG routine
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -190,7 +196,7 @@ Ram64MsgOff = 280
                       lda #@str[@index]
                       sta .screenStart + .offset + @index
                     }
-                    lda .color
+                    lda #.color
                     !for @index, 0, @length - 1 {
                       sta ColMemStart + .offset + @index
                     }
@@ -202,7 +208,7 @@ Ram64MsgOff = 280
                       lda #@str[@index]
                       sta .screenStart + .offset + @index, y
                     }
-                    lda .color
+                    lda #.color
                     !for @index, 0, @length - 1 {
                       sta ColMemStart + .offset + @index, y
                     }
@@ -351,7 +357,7 @@ ClearScreen_1       lda #$20
 OutText_Header      ldx #$27                ; 40 chars (header)
 -                   lda StatusHeader,x      ; fetch text
                     sta $0630,x             ; store to screen RAM
-                    lda ColorTextBad        ; RED color
+                    lda #ColorTextBad       ; RED color
                     sta $da30,x             ; fill color RAM
                     dex
                     bpl -
@@ -381,7 +387,7 @@ OutColor_Status     ldx #$00                ; write correct colors to color RAM,
 OutText_Footer      ldx #$27                ; 40 chars (footer)
 OutText_Footer_1    lda StatusFooter,x
                     sta $0748,x
-                    lda ColorTextBad        ; RED color
+                    lda #ColorTextBad       ; RED color
                     sta $db48,x             ; fill color RAM
                     dex
                     bpl OutText_Footer_1
@@ -535,7 +541,7 @@ ReCheckTestPattern  lda $0100,y             ; now re-read RAM pages and compare 
                     beq PatternComplete     ; already looped through whole RAM page?
                     jmp ReCheckTestPattern  ; no -> loop on
                     
-ErrorHandler        jmp BlinkOutRamError               ; error handler for RAM Test errors
+ErrorHandler        jmp BlinkOutRamError    ; error handler for RAM Test errors
                     
 PatternComplete     dex                     ; no errors, continue with next pattern
                     bmi Thorough512Test     ; all patterns tested?
@@ -851,15 +857,11 @@ Test_RunTestsFromRam
                     lda #$2C  ; BIT $xxxx
                     sta Test_RamTestScrn1 - RelocatableCodeStart + TestsInRamStart
                     sta Test_RamTestScrn2 - RelocatableCodeStart + TestsInRamStart
-                    lda #80   ; move down 64k test result output by two lines
+                    lda #120   ; move down 64k test result output by three lines
                     sta Test_RamTest_scroff - RelocatableCodeStart + TestsInRamStart
 
-                    +UltimaxMode_A
-                    bcc +
-                    lda #($3800/$0800*2 + $10)  ; VIC-II sees ROM $F000 at $3000 in Ultimax mode
-                    bcs ++
-+                   lda #($0800/$0800*2 + $10)  ; use RAM charset in normal mode
-++                  sta $d018
+                    lda #$12                   ; use RAM charset
+                    sta $d018
 
                     jsr TrampolineForRelocatableTests
                     rts
@@ -1006,8 +1008,26 @@ TrampolineForRelocatableTests
                     +CopyStr_AX strRamTest64k, RamTestMsgScrStart, RamTest64kMsgLen
                     +CopyStr_AX strRamTest64k, ScreenMemStart + Ram64MsgOff, 12
                     jsr Test_RamTest_64k - RelocatableCodeStart + TestsInRamStart
-                    ; RAM is okay
+                    ; RAM is okay, RAMTest switched VIC back to $0400/$0800 already
                     +WriteStr_A ScreenMemStart, Ram64MsgOff+13, ColorTextOk, "ok"
+
+                    ; We don't need the upper RAM for a few seconds.
+                    ; copy charsets and test pattern there for helping with
+                    ; debugging possible VIC-II bank selection problems.
+                    ldy #$00
+                    clc
+-                   lda #'1'
+                    sta $4400,y
+                    lda #'2'
+                    sta $8400,y
+                    lda #'3'
+                    sta $c400,y
+                    lda $0800,y
+                    sta $4800,y
+                    sta $8800,y
+                    sta $c800,y
+                    iny
+                    bne -
 
                     jsr Test_CRCTest
 
@@ -1235,8 +1255,6 @@ Test_KeyboardPrint  sec
 ; Stays in ROM for simple 4k check
 ;---------------------------------------------------------------------------------------------------------------------------
 
-RamTestMsgScrStart  = 40
-RamTestLongMsgLen   = 66
 RamTestBegin        = RamTestMsgScrStart + RamTestLongMsgLen + 1
 
 Test_RamTest_64k    ; called when running from RAM
@@ -1317,7 +1335,7 @@ Test_RamTest_Ok     ; all ok, reset memory layout and jump back
                     sta $01
 Test_RamTestScrn1 = *                       ; for RAM only test patching (BIT instead of JSR)
                     jsr SetupTextScreen
-                    lda VicInit+$18
+                    lda #$12
                     sta $d018               ; switch VIC-II to RAM again
                     lda #$0f                ; "O"
                     sta ScreenMemStart+RamMsgOff+13
@@ -1327,7 +1345,7 @@ Test_RamTestScrn1 = *                       ; for RAM only test patching (BIT in
                     sta ScreenMemStart+RamMsgOff+14
                     sta ScreenMemStart+ZPMsgOff+14
                     sta ScreenMemStart+ColMsgOff+14
-                    lda ColorTextOk
+                    lda #ColorTextOk
                     sta ColMemStart+RamMsgOff+13
                     sta ColMemStart+ZPMsgOff+13
                     sta ColMemStart+ColMsgOff+13
@@ -1340,7 +1358,7 @@ Test_RamTestReturn = *                      ; for 64k test patching (RTS instead
 Test_RamTest_BitErr ; expects bit errors in A or zero on PRNG check error
                     tax
                     txs                     ; just use S as temp register, stack is unreliable anyways
-                    lda VicInit+$18
+                    lda #$12
                     sta $d018               ; switch VIC-II to RAM again
                     ldy #$ff
 Test_RamTestScrn2 = *                       ; for RAM only test patching (BIT instead of JMP)
@@ -1527,7 +1545,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250724" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250725" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
@@ -1538,9 +1556,6 @@ strSoundTest        !scr "sound test"                               ; 10 chars f
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Constants and Tables
 ;---------------------------------------------------------------------------------------------------------------------------
-
-ColorTextOk         !hex 05     ; green
-ColorTextBad        !hex 02     ; red
 
 TestPatterns        !hex 00 55 aa ff 01 02 04 08 10 20 40 80 fe fd fb f7
                     !hex ef df bf 7f

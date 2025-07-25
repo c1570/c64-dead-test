@@ -1,11 +1,11 @@
-# C64 Dead Test 781220
+# C64 Dead Test
 https://github.com/c1570/c64-dead-test
 
-The C64 "Dead Test 781220" ROM with lots of improvements and much better RAM check.
-This version checks stack and screen RAM during the normal RAM test.
+The C64 "Dead Test" ROM, trying to coax your C64 to life even if its ROMs and RAM are mostly gone.
 
-In Ultimax cartridge mode, it can only check the first 4KBytes of RAM.
-If used as KERNAL ROM or if removing the GAME jumper during sound check, it checks the full 64KBytes.
+Compared with the original CBM "Dead Test 781220", this version comes with lots of improvements and much better RAM check.
+In standard Ultimax cartridge mode, it can only check the first 4KBytes of RAM.
+If removing the GAME jumper during sound check or using the ROM as KERNAL ROM, it checks the full 64KBytes.
 
 Version 002 to 006 modifications by Kinzi.
 
@@ -15,7 +15,10 @@ Version 002 to 006 modifications by Kinzi.
 
 ## Synopsis
 
-In short, on power up, the cartridge will...
+Named aptly, the Dead Test ROM is your first go to point in case your C64 only presents a black screen after power up.
+As long as the CPU has access to the cartridge ROM (i.e., address bus and data lines are working, PLA and CPU and logic ICs aren't completely broken), Dead Test will do _something_.
+
+On power up, the cartridge will...
 1. set screen to light gray immediately after power on
 2. perform a simple self integrity check that checks reading the dead test ROM (15 flashes in case of an error)
 3. run a simple RAM check with different byte patterns (blank screen/changing colors, about 9 seconds)
@@ -25,38 +28,40 @@ In short, on power up, the cartridge will...
 5. after that, the text screen will be shown, running more tests in an infinite loop
    - during the RAM test, screen output will be (mostly) random text (VIC-II screen mem set to $0000, charset to cartridge ROM $F800; otherwise screen mem $0400 and charset RAM $0800)
    - sound will play about 40 seconds after initial power on
-   - **during sound check, remove the GAME jumper** from the cartridge to have it run additional checks (see "RAM mode" below)
+   - **during sound check, remove the GAME jumper** from the cartridge to have it run additional checks (see "RAM mode" below). Removing must be quick and **bounce free**, or the C64 will crash, so perhaps use a good mechanical switch.
    - each loop of step 5 takes about 40 seconds
    - during the RAM test, in case the "ram test is running, screen will be restored in a few seconds" message/charset is garbled, the VIC-II cannot access ROM properly (check U26 and surrounding PCB traces or PLA)
    - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 4
+   - failing CIA1 check means that CIA1 timer A failed to run properly (CIA1 broken, PCB traces broken, PLA broken, logic ICs processing PLA output broken). This is far from a complete test but passing it should be enough for general BASIC V2 needs.
 
-If all tests pass, you can assume that CPU, PLA, VIC-II and RAM (**first 4k only**) are working to some degree.
-This test **does not** test ROMs nor RAM above 4k nor CIAs (properly).
-In fact, this test will work fine without CIA1 (and often CIA2 as well), without SID, and without any ROMs.
+If all Ultimax mode tests pass, you can assume that CPU, PLA, VIC-II and RAM (first 4k only) are working to some degree.
+This test **does not** test ROMs nor RAM above 4k nor CIAs (properly) on its own.
+You need to switch to RAM mode during sound check for testing a bit more thoroughly.
 
+### Tape port LEDs
 Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 3 above), or flip their status every few dozen seconds while the continuous tests are running (step 5).
 
-## KERNAL ROM mode
-If used as KERNAL ROM, after the sound check, another RAM test pass up to the full 64KBytes is done.
-During RAM tests, the charset from the CHARROM will be enabled.
-If you get broken characters during the KERNAL mode RAM check, your CHARROM is broken, missing, or the PLA does not enable it properly.
-Additional checks (see below) run as well.
+In case the Dead Test still gives a black screen, and even these LEDs don't do anything, there is a bigger problem with the buses, logic ICs, and/or PLA.
 
 ## RAM mode
 RAM mode is triggered by removing the cartridge's GAME jumper while the sound check is running.
-This mode is similar to KERNAL ROM mode but cannot loop back to the zeropage and screen memory checks.
-It does run the checks below though.
+This mode runs a few additional checks (see below).
+If all checks pass, and correct ROM checksums are displayed, the C64 should be able to start to BASIC V2.
+When looping tests, RAM mode cannot loop back to the zeropage and screen memory checks due to memory constraints.
 
-## CIA1 check
-This checks whether CIA1 timer A works as required by BASIC V2 (i.e., it runs and triggers).
-No thorough checking of CIA1 is done.
+### Keyboard check
+The keyboard checks is active for some seconds, during which you can press some keys, or move the joystick.
+The two bars of stars are the bit patterns of $DC00/$DC01.
+Leftmost position of the first bar is PA7, rightmost position is PA0; leftmost for the second is PB7, rightmost is PB0.
 
-## Keyboard check
-While the keyboard check is running, press some keys, or move the joystick.
 For example, `0******* *******0` means the key at position PA7/PB0 has been pressed (see [keyboard matrix](https://www.c64-wiki.com/wiki/Keyboard#Keyboard_Matrix): it's the `1` key).
-If this does not work, CIA1 (or PCB traces, or PLA) are broken.
+If this does not work, CIA1 (or PCB traces, or PLA/logic ICs) are broken.
 
-## ROM CRC
+### VIC-II bank check
+During the keyboard check, a screen test pattern gets displayed on the VIC-II banks that are not actually selected for display by CIA2.
+If the screen is garbled during Dead Test in general, but shows numbers in the upper quarter of the screen about a minute after the sound check and when in RAM mode, then there's a problem with CIA2 VIC-II bank selection (CIA2, logic ICs, PLA, PCB traces).
+
+### ROM CRC
 Compare the CRCs displayed against this list.
 If the CRCs displayed are not stable between test runs, there is definitely a problem.
 ```
@@ -73,6 +78,11 @@ c2bc JiffyDOS V6.01 C64
 cc25 kernal-390852-01
 ffd0 kernal-901227-03
 ```
+
+## KERNAL ROM mode
+If used as KERNAL ROM, after the sound check, similar to the RAM mode, a 64k RAM test as well as other additional tests get run.
+During RAM tests, the charset from the CHARROM will be enabled.
+If you get broken characters during the KERNAL mode RAM check, your CHARROM is broken, missing, or PLA/logic ICs do not enable it properly.
 
 ## Historical info
 
