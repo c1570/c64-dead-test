@@ -38,6 +38,9 @@ If all Ultimax mode tests pass, you can assume that CPU, PLA, VIC-II and RAM (fi
 This test **does not** test ROMs nor RAM above 4k nor CIAs (properly) on its own.
 You need to switch to RAM mode during sound check for testing a bit more thoroughly.
 
+An NMI (e.g., pressing RESTORE) changes screen background color.
+NMIs clobber the stack and may cause RAM tests to fail.
+
 ### Tape port LEDs
 Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 3 above), or flip their status every few dozen seconds while the continuous tests are running (step 5).
 
@@ -53,9 +56,12 @@ When looping tests, RAM mode cannot loop back to the zeropage and screen memory 
 The keyboard checks is active for some seconds, during which you can press some keys, or move the joystick.
 The two bars of stars are the bit patterns of $DC00/$DC01.
 Leftmost position of the first bar is PA7, rightmost position is PA0; leftmost for the second is PB7, rightmost is PB0.
-
 For example, `0******* *******0` means the key at position PA7/PB0 has been pressed (see [keyboard matrix](https://www.c64-wiki.com/wiki/Keyboard#Keyboard_Matrix): it's the `1` key).
-If this does not work, CIA1 (or PCB traces, or PLA/logic ICs) are broken.
+
+To check all lines, try keys `1`, `*`, `L`, `0`, `B`, `F`, `E`, CrsrDown.
+
+If no reaction is visible at all, CIA1 or PCB traces or PLA/logic ICs are broken.
+Partial faults may be due to cable or PCB trace or keyboard switch issues.
 
 ### VIC-II bank check
 During the keyboard check, a screen test pattern gets displayed on the VIC-II banks that are not actually selected for display by CIA2.

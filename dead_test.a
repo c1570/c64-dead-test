@@ -276,15 +276,13 @@ Reset_Handler       sei
 ; Still, keep testing and be defensive - problems may occur once the machine has warmed up
 ;---------------------------------------------------------------------------------------------------------------------------
 
-MainTestStart       +Flip_Cass_Port_A
-
-CiaRegInit1         ldx #$04
-CiaRegInit1_1       lda Cia1Init,x          ; CIA TOD init
+MainTestStart       ldx #$04
+-                   lda Cia1Init,x          ; CIA TOD init
                     sta $dc07,x
                     lda Cia2Init,x
                     sta $dd07,x
                     dex
-                    bne CiaRegInit1_1
+                    bne -
 
 CiaRegInit2         lda #$08                ; CIA Timer B Control: Oneshot mode
                     sta $dc0f
@@ -298,7 +296,8 @@ CiaRegInit2         lda #$08                ; CIA Timer B Control: Oneshot mode
                     stx passCounterLo
                     stx passCounterHi
 
-MainTestLoop        ldx #$2f                ; VIC register init
+MainTestLoop        +Flip_Cass_Port_A
+                    ldx #$2f                ; VIC register init
 -                   lda VicInit,x
                     sta $d000,x
                     dex
@@ -311,6 +310,7 @@ MainTestLoop        ldx #$2f                ; VIC register init
                     +Flip_Cass_Port_A
                     jsr UpdateTod1Display
                     jsr Test_ColorRam
+                    +Flip_Cass_Port_A
                     jsr UpdateTod1Display
 
                     ; RAM test code is kept small in case it's running from RAM
@@ -365,7 +365,7 @@ OutText_Header      ldx #$27                ; 40 chars (header)
                     +CopyStr_AX strZeroPage, ScreenMemStart+ZPMsgOff, 9
                     +CopyStr_AX strColorRam, ScreenMemStart+ColMsgOff, 9
                     +CopyStr_AX strRamTest, ScreenMemStart+RamMsgOff, 11
-                    +CopyStr_AX strCia1Test, ScreenMemStart+Cia1MsgOff, 10
+                    +CopyStr_AX strCia1Test, ScreenMemStart+Cia1MsgOff, 12
                     +CopyStr_AX strSoundTest, ScreenMemStart+SoundMsgOff, 10
                     
 OutText_Status      ldx #$00                ; output a string terminated by "FF"
@@ -863,6 +863,14 @@ Test_RunTestsFromRam
                     lda #$12                   ; use RAM charset
                     sta $d018
 
+                    ; set NMI vectors so that pressing RESTORE doesn't crash the machine
+                    lda #<(NMI_Handler_RAM)
+                    sta $fffa
+                    sta $0318
+                    lda #>(NMI_Handler_RAM)
+                    sta $fffb
+                    sta $0319
+
                     jsr TrampolineForRelocatableTests
                     rts
 
@@ -995,8 +1003,10 @@ strCrcKernal        !scr "kernal crc"
 strCrcCharset       !scr "charrom crc"
 
 TrampolineForRelocatableTests
+                    +Flip_Cass_Port_A
                     jsr Test_SoundTest
 
+                    +Flip_Cass_Port_A
                     +UltimaxMode_A
                     bcc +
                     jsr TrampolineNextPass
@@ -1031,6 +1041,7 @@ TrampolineForRelocatableTests
 
                     jsr Test_CRCTest
 
+                    +Flip_Cass_Port_A
                     jsr Test_KeyboardTest
 
                     jsr TrampolineNextPass
@@ -1049,10 +1060,10 @@ TrampolineForRelocatableTests
                     sta $ffff
                     sta $fffe
                     lda $ffff
-                    cmp #>(ISR)
+                    cmp #>(IRQ_Handler)
                     bne +
                     lda $fffe
-                    cmp #<(ISR)
+                    cmp #<(IRQ_Handler)
                     bne +
                     rts                     ; our ROM is visible, return
 +                   ldy #30                 ; dead test ROM not available:
@@ -1072,8 +1083,11 @@ TrampolineNextPass
                     adc passCounterHi
                     sta passCounterHi
                     cld
-                    +Flip_Cass_Port_A
                     rts
+
+
+NMI_Handler_RAM     inc $d021
+                    rti
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; CRC Test
@@ -1189,7 +1203,7 @@ CRC_MakeTable:
          bne --          ; Do next byte
          rts
 
-CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT standard
+CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT/CRC16-XMODEM standard
          lda #$00
          sta crc
          sta crc+1
@@ -1202,7 +1216,10 @@ CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT standard
 strKeyboardTest     !scr "keyboard"
 KeyboardMsgOff = Ram64MsgOff + 160
 
-Test_KeyboardTest   +CopyStr_AX strKeyboardTest, ScreenMemStart + KeyboardMsgOff, 8
+Test_KeyboardTest   lda #31                 ; arrow left
+                    sta ScreenMemStart+KeyboardMsgOff+13+18
+                    +CopyStr_AX strKeyboardTest, ScreenMemStart + KeyboardMsgOff, 8
+
                     lda #$01
                     sta ColMemStart + KeyboardMsgOff + 21   ; hide 9th digit
                     sta ColMemStart + KeyboardMsgOff + 30
@@ -1230,6 +1247,11 @@ Test_KeyboardTest   +CopyStr_AX strKeyboardTest, ScreenMemStart + KeyboardMsgOff
 Test_KeyCounter = * + 1
                     lda #$00
                     bne Test_KeyboardTest
+                    lda #32                 ; delete keyboard output again
+                    ldy #18
+-                   sta ScreenMemStart+KeyboardMsgOff+13,y
+                    dey
+                    bpl -
                     rts
 
 Test_KeyboardPrint  sec
@@ -1419,9 +1441,7 @@ LoopUntilDoomsday   inc $d020
 ; Update TOD1 display
 ;---------------------------------------------------------------------------------------------------------------------------
 
-UpdateTod1Display   +Flip_Cass_Port_A
-					
-                    lda $dc0b               ; test for PM flag
+UpdateTod1Display   lda $dc0b               ; test for PM flag
                     clc
                     asl
                     bcc OutText_TOD1_AM
@@ -1545,12 +1565,12 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250725" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250726" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
 strRamTest          !scr "ram test 4kb is running, screen will be restored in a few seconds."
-strCia1Test         !scr "cia1 check"                               ; 10 chars fixed text
+strCia1Test         !scr "cia1 timer a"                             ; 12 chars fixed text
 strSoundTest        !scr "sound test"                               ; 10 chars fixed text
 
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -1667,11 +1687,12 @@ StatusFooter        !scr 36, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", 37
 ; CPU vectors, etc
 ;---------------------------------------------------------------------------------------------------------------------------
 
-                    * = $fff8
-:ROMChecksum        !hex 00
+                    * = $fff5
+:NMI_Handler        inc $d021
+:IRQ_Handler        rti
 
-                    * = $fff9                           ; Interrupt service routine
-:ISR                rti
+                    * = $fff9
+:ROMChecksum        !hex 00
+                    !word NMI_Handler
                     !word Reset_Handler
-                    !word Reset_Handler
-                    !word ISR
+                    !word IRQ_Handler
