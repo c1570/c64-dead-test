@@ -20,18 +20,19 @@ As long as the CPU has access to the cartridge ROM (i.e., address bus and data l
 
 On power up, the cartridge will...
 1. set screen to light gray immediately after power on
-2. perform a simple self integrity check that checks reading the dead test ROM (15 flashes in case of an error)
-3. run a simple RAM check with different byte patterns (blank screen/changing colors, about 9 seconds)
+2. run a quick integrity test of the dead test ROM (15 flashes in case of an error)
+3. run a quick RAM addressing check (9 flashes in case RAM writes overwrite unrelated addresses - check U13/U25 and surrounding PCB traces)
+4. run a simple RAM check with different byte patterns (blank screen/changing colors, about 9 seconds)
    - any bit errors will be shown by a blinking pattern, 1 flash = D7, 2 flashes = D6, etc., see [dead_test_ok.png](/dead_test_ok.png) for mappings to ICs
-4. run a more thorough RAM check of $0002-$01FF (blank screen/fast changing colors, about 3 seconds)
-   - errors will be shown by the screen flashing 10 times (indicating problems in RAM addressing - check U13/U25 and surrounding PCB traces)
-5. after that, the text screen will be shown, running more tests in an infinite loop
+5. run a more thorough RAM check of $0002-$01FF (blank screen/fast changing colors, about 3 seconds)
+   - errors will be shown by the screen flashing 10 times (indicating problems in RAM addressing similar to step 3)
+6. after that, the text screen will be shown, running more tests in an infinite loop
    - during the RAM test, screen output will be (mostly) random text (VIC-II screen mem set to $0000, charset to cartridge ROM $F800; otherwise screen mem $0400 and charset RAM $0800)
    - sound will play about 40 seconds after initial power on
    - **during sound check, remove the GAME jumper** from the cartridge to have it run additional checks (see "RAM mode" below). Removing must be quick and **bounce free**, or the C64 will crash, so perhaps use a good mechanical switch.
-   - each loop of step 5 takes about 40 seconds
+   - each loop of step 6 takes about 40 seconds
    - during the RAM test, in case the "ram test is running, screen will be restored in a few seconds" message/charset is garbled, the VIC-II cannot access ROM properly (check U26 and surrounding PCB traces or PLA)
-   - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 4
+   - `ADRFAIL` in the RAM test indicates addressing problems similar to failing in step 3
    - failing CIA1 check means that CIA1 timer A failed to run properly (CIA1 broken, PCB traces broken, PLA broken, logic ICs processing PLA output broken). This is far from a complete test but passing it should be enough for general BASIC V2 needs.
 
 If all Ultimax mode tests pass, you can assume that CPU, PLA, VIC-II and RAM (first 4k only) are working to some degree.
@@ -42,7 +43,7 @@ An NMI (e.g., pressing RESTORE) changes screen background color.
 NMIs clobber the stack and may cause RAM tests to fail.
 
 ### Tape port LEDs
-Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 3 above), or flip their status every few dozen seconds while the continuous tests are running (step 5).
+Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 4 above), or flip their status every few dozen seconds while the continuous tests are running (step 6).
 
 In case the Dead Test still gives a black screen, and even these LEDs don't do anything, there is a bigger problem with the buses, logic ICs, and/or PLA.
 

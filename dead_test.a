@@ -442,21 +442,46 @@ OutText_Count_1     lda strCount,x          ; write "COUNT"
 ;---------------------------------------------------------------------------------------------------------------------------
 
 IntegrityTest       lda #$00
-                    ldx #$10
+                    ldx #$10                ; repeat checksum test 16 times
 --                  ldy #$00
 -                   !for Iter, 0, 31 { eor $e000 + Iter * $0100,y }
                     iny
                     bne -
-                    cmp #$00  ; ROMChecksum is added in build process
-                    bne IntegrityError
-                    dex
-                    bne -
-                    beq InitialRamTest
+                    cmp #$00                ; ROMChecksum is added in build process
+                    beq +
 IntegrityError      ldx #15
+                    jmp RTBlinkX
++                   dex
+                    bne -
+; just fall through to next test
+
+;---------------------------------------------------------------------------------------------------------------------------
+; Initial RAM Addressing Test
+; This reads one arbitrary address ($0b55 in this case) then overwrites all other RAM with its complement
+; then rechecks the arbitrary address. If it's been changed by the other writes, there's a problem with
+; addressing (or memory is unstable in general).
+;---------------------------------------------------------------------------------------------------------------------------
+
+InitialRamAddrTest  lda $0b55
+                    eor #$ff
+                    ldy #$00
+-                   cpy #$02
+                    bcc +
+                    sta $0000,y
++                   !for Iter, 1, 15 { !if Iter != $b { sta $0000 + Iter * $0100,y } }
+                    cpy #$55
+                    beq +
+                    sta $0b00,y
++                   iny
+                    bne -
+                    eor #$ff
+                    cmp $0b55
+                    beq InitialRamTest
+                    ldx #9
                     jmp RTBlinkX
 
 ;---------------------------------------------------------------------------------------------------------------------------
-; Initial RAM Test 
+; Initial RAM Test
 ;---------------------------------------------------------------------------------------------------------------------------
 
 InitialRamTest      ldx #$15                ; 22 test patterns
@@ -1565,7 +1590,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250726" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250731" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
