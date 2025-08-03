@@ -1,8 +1,8 @@
 ;---------------------------------------------------------------------------------------------------------------------------
-; "C-64 DEAD TEST REV 781220"
+; "C-64 DEAD TEST"
 ; https://github.com/c1570/c64-dead-test
 ;
-; Disassembled source code of original Dead Test - copyright, credits, status unknown.
+; Initially disassembled from original Dead Test 781220 - copyright, credits, status unknown.
 ; Comments, "improvements", fixes, etc., up to 006 by kinzi @ Forum64, see https://www.forum64.de/
 ; More recent changes authors see Git
 ;---------------------------------------------------------------------------------------------------------------------------
@@ -477,8 +477,26 @@ InitialRamAddrTest  lda $0b55
                     eor #$ff
                     cmp $0b55
                     beq InitialRamTest
-                    ldx #9
-                    jmp RTBlinkX
+InitialRamAddrErr   ; found an error; signal to the user for a few secs
+                    lda #2                  ; red
+                    ldx #50                 ; blink 50 times
+--                  txs
+                    ldx #0
+                    ldy #0
+                    sta $d020
+-                   dex
+                    bne -
+                    dey
+                    bne -
+                    eor #4                  ; red<->blue
+                    tay                     ; save color in Y
+                    +Flip_Cass_Port_A
+                    tya                     ; restore color to A
+                    tsx
+                    dex
+                    bne --
+                    dex
+                    txs                     ; reinit SP, then fall through to next test
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Initial RAM Test
@@ -1590,7 +1608,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250731" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250803" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text
