@@ -1010,7 +1010,19 @@ Test_SoundNextNote  ldx SidRegOff
                     sta $d400,x            ; start sound
                     lda #$6a
 
-                    jsr SoundDelayLoop
+SoundDelayLoop      ; clobbers Y
+                    tay
+                    txa
+                    pha
+                    tya
+                    tax
+--                  ldy #$ff
+-                   dey
+                    bne -
+                    dex
+                    bne --
+                    pla
+                    tax
 
                     pla
                     tay
@@ -1018,22 +1030,6 @@ Test_SoundNextNote  ldx SidRegOff
                     sta $d400,x
                     iny
                     bne Test_SoundNextNote ; unconditional jump
-
-
-SoundDelayLoop      ; clobbers Y
-                    tay
-                    txa
-                    pha
-                    tya
-                    tax
-SoundDelayLoop_1    ldy #$ff
-SoundDelayLoop_2    dey
-                    bne SoundDelayLoop_2
-                    dex
-                    bne SoundDelayLoop_1
-                    pla
-                    tax
-SoundDelayLoopCpl   rts
 
 ;---------------------------------------------------------------------------------------------------------------------------
 ; Relocatable code trampoline
@@ -1257,16 +1253,14 @@ CRC_Init:                ; Paul uses #$ff but we stay with the CRC-CITT/CRC16-XM
 ;---------------------------------------------------------------------------------------------------------------------------
 
 strKeyboardTest     !scr "keyboard"
+Test_KeyCounter     !hex 00
 KeyboardMsgOff = Ram64MsgOff + 160
 
 Test_KeyboardTest   lda #31                 ; arrow left
                     sta ScreenMemStart+KeyboardMsgOff+13+18
                     +CopyStr_AX strKeyboardTest, ScreenMemStart + KeyboardMsgOff, 8
 
-                    lda #$01
-                    sta ColMemStart + KeyboardMsgOff + 21   ; hide 9th digit
-                    sta ColMemStart + KeyboardMsgOff + 30
-                    ldx #$ff
+--                  ldx #$ff
                     stx $dc03               ; port B output
                     inx
                     stx $dc01               ; port B all low
@@ -1275,6 +1269,7 @@ Test_KeyboardTest   lda #31                 ; arrow left
                     lda $dc00
                     ldy #13
                     jsr Test_KeyboardPrint
+                    ldx #$00
                     stx $dc03               ; port B input
                     dex
                     stx $dc02               ; port A output, all low
@@ -1284,30 +1279,31 @@ Test_KeyboardTest   lda #31                 ; arrow left
                     dey
                     bne -
                     inc Test_KeyCounter
+                    beq Test_KeyboardEnd
                     lda $dc01
                     ldy #22
                     jsr Test_KeyboardPrint
-Test_KeyCounter = * + 1
-                    lda #$00
-                    bne Test_KeyboardTest
-                    lda #32                 ; delete keyboard output again
+                    jmp --
+
+Test_KeyboardEnd    lda #32                 ; delete keyboard output again
                     ldy #18
 -                   sta ScreenMemStart+KeyboardMsgOff+13,y
                     dey
                     bpl -
                     rts
 
-Test_KeyboardPrint  sec
--                   rol
+Test_KeyboardPrint  ldx #$08
+-                   clc
+                    rol
                     pha
                     bcc +
                     lda #42                 ; "*"
                     bcs ++
 +                   lda #48                 ; "0"
 ++                  sta ScreenMemStart + KeyboardMsgOff,y
-                    iny
                     pla
-                    clc
+                    iny
+                    dex
                     bne -
                     rts
 
@@ -1608,7 +1604,7 @@ Le7b6               sta $07e4
 
                     !align 255,0  ; not strictly necessary
 
-strCaption          !scr "github.com/c1570/c64-dead-test  20250803" ; 40 chars fixed text (one line)
+strCaption          !scr "github.com/c1570/c64-dead-test  20250804" ; 40 chars fixed text (one line)
 strCount            !scr "count"                                    ;  5 chars fixed text
 strZeroPage         !scr "zero page"                                ;  9 chars fixed text
 strColorRam         !scr "color ram"                                ;  9 chars fixed text

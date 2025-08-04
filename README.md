@@ -101,6 +101,7 @@ If the CRCs displayed are not stable between test runs, there is definitely a pr
 20dc chargen-906143-02
 22ef JiffyDOS V6.01 SX64
 2f69 kernal-901227-01
+5283 Dead Test 20250804
 6a8d basic-901226-01
 8271 kernal-251104-04
 9fcd kernal-901246-01
@@ -111,7 +112,7 @@ ffd0 kernal-901227-03
 ```
 
 ### Keyboard check
-The keyboard checks is active for some seconds, during which you can press some keys, or move the joystick.
+The keyboard check is active for some seconds, during which you can press some keys, or move the joystick.
 The two bars of stars are the bit patterns of $DC00/$DC01.
 Leftmost position of the first bar is PA7, rightmost position is PA0; leftmost for the second is PB7, rightmost is PB0.
 For example, `0******* *******0` means the key at position PA7/PB0 has been pressed (see [keyboard matrix](https://www.c64-wiki.com/wiki/Keyboard#Keyboard_Matrix): it's the `1` key).
@@ -127,9 +128,9 @@ During the keyboard check, a screen test pattern gets displayed on the VIC-II ba
 If the screen is garbled during Dead Test in general, but shows numbers in the upper quarter of the screen about a minute after the sound check and when in RAM mode, then there's a problem with CIA2 VIC-II bank selection (CIA2, logic ICs, PLA, PCB traces).
 
 ### Test looping
-In Ultimax mode, after the Sound Check, tests will loop to the Zero Page test.
-In RAM mode (GAME jumper removed during Sound Check), tests will loop after the keyboard test and restart from the 64k check.
-In KERNAL mode, tests will loop after the keyboard test to the Zero Page test.
+- In Ultimax mode, after the Sound Check, tests will loop to the Zero Page test.
+- In RAM mode (GAME jumper removed during Sound Check), tests will loop after the keyboard test and restart from the 64k check.
+- In KERNAL mode, tests will loop after the keyboard test to the Zero Page test.
 
 ### NMI handling
 An NMI (e.g., pressing RESTORE) changes screen background color.
