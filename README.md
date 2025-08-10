@@ -17,10 +17,19 @@ Version 002 to 006 modifications by Kinzi.
 Named aptly, the Dead Test ROM is your first go to point in case your C64 only presents a black screen after power up.
 As long as the CPU has access to the cartridge ROM (i.e., address bus and data lines are working, PLA and CPU and logic ICs aren't completely broken), Dead Test will do _something_.
 
-## Tape port LEDs
-Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any RAM bit error flashing (see step 4 above), or flip their status every few dozen seconds while the tests are looping.
+## Building
+Program the BIN file (see download above) into an (E)EPROM, put that into some Ultimax capable C64 cartridge (e.g., [OpenC64Cart](https://github.com/SukkoPera/OpenC64Cart)) as HIROM, set GAME to enable/low, EXROM to disable/high, and off you go (for the OpenC64Cart, set A13-A15 to low in case you programmed the BIN file to the beginning of the EPROM).
 
-In case the Dead Test still gives a black screen, and even these LEDs don't do anything, there is a bigger problem with the buses, logic ICs, and/or PLA.
+## Screen Blink Codes
+- 15 black/white flashes, pause, repeat: Dead Test ROM integrity check fail (ROM programmed incorrectly, broken, incompatible with C64, problems with bus, expansion port pins dirty, PLA broken, or similar)
+- 25 red/blue flashes, then continues: RAM addressing check fail (see below)
+- 10 black/white flashes, pause, repeat: RAM check $0002-$01FF fail (see below)
+- 1 to 8 black/white flashes, pause, repeat: Single bit error in Pattern based RAM check. 1 flash = D7, 2 flashes = D6, etc. (see below)
+
+## Tape port LEDs
+Two low current LEDs connected to the tape port (anode to motor/sense pins, 1.8k resistor in series, wire to GND) will mirror any screen flash code, or flip their status every few dozen seconds while the tests are looping.
+
+In case the Dead Test gives a black screen, and even these LEDs don't do anything, there is a bigger problem with the buses, logic ICs, and/or PLA.
 
 ## Testing steps
 The cartridge will set the screen to light gray immediately after power on.
@@ -70,6 +79,8 @@ During this test, screen output will be (mostly) random text (VIC-II screen mem 
 In case the "ram test is running, screen will be restored in a few seconds" message/charset is garbled, the VIC-II cannot access ROM properly (check U26 and surrounding PCB traces or PLA).
 
 `ADRFAIL` in this test indicates addressing problems similar to failing in the __RAM addressing check__.
+
+Each test run uses a different seed for the pseudo-random data so additional passes give a bit more confidence in the RAM.
 
 ### CIA1 Timer A test
 Tests whether CIA1 Timer A can be programmed and fires correctly. This timer is used by BASIC V2 to generate interrupts (read keyboard, blink cursor).
@@ -141,6 +152,8 @@ If all Ultimax mode (cartridge and GAME jumper enabled) tests pass, you can assu
 This test **does not** test ROMs nor RAM above 4k nor CIAs (properly) on its own.
 
 If all tests including the __additional tests__ (GAME jumper removed/KERNAL mode) pass, and correct ROM checksums are displayed, the C64 should be able to start to BASIC V2.
+
+If the Dead Test crashes randomly, please reset. Once the initial RAM test passed, the Dead Test ROM trusts the CPU stack RAM area somewhat. The initial RAM test does not though.
 
 ## Historical info
 
